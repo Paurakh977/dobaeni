@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Preloader from "./Preloader";
-import CustomCursor from "./CustomCursor";
+import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import SmoothScroll from "./SmoothScroll";
+import CustomCursor from "./CustomCursor";
+import Preloader from "./Preloader";
 import Navbar from "./Navbar";
 import Hero from "./Hero";
 import Marquee from "./Marquee";
@@ -16,28 +17,28 @@ import Footer from "./Footer";
 export default function Home() {
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 3000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading) {
-    return <Preloader onComplete={() => setLoading(false)} />;
-  }
-
   return (
-    <SmoothScroll>
+    <div className="dobaeni-page">
+      <div className="dobaeni-noise" />
+
+      <AnimatePresence>
+        {loading && <Preloader onComplete={() => setLoading(false)} />}
+      </AnimatePresence>
+
       <CustomCursor />
-      <Navbar />
-      <main>
-        <Hero isIntro />
-        <Marquee />
-        <RevealSection />
-        <GallerySection />
-        <FeaturesSection />
-        <ManifestoSection />
-      </main>
-      <Footer />
-    </SmoothScroll>
+
+      <SmoothScroll>
+        <Navbar />
+        <main>
+          <Hero isIntro={!loading} />
+          <Marquee />
+          <RevealSection />
+          <GallerySection />
+          <FeaturesSection />
+          <ManifestoSection />
+        </main>
+        <Footer />
+      </SmoothScroll>
+    </div>
   );
 }
