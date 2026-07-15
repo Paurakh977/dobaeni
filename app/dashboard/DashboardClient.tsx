@@ -3,19 +3,31 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight, ArrowLeft } from "lucide-react";
+import { LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight, ArrowLeft, BarChart3, Store, Megaphone } from "lucide-react";
 import AccountPanel from "./AccountPanel";
 
 export default function DashboardClient({ user, initialTwoFactorEnabled, emailVerified }: any) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
 
-  const TABS = [
+  const isSeller = user.role === 'seller';
+
+  const BUYER_TABS = [
     { id: "overview", label: "Overview", icon: LayoutDashboard },
     { id: "orders", label: "My Orders", icon: ShoppingBag },
     { id: "boards", label: "My Boards", icon: Heart },
     { id: "settings", label: "Account Settings", icon: Settings },
   ];
+
+  const SELLER_TABS = [
+    { id: "overview", label: "Analytics", icon: BarChart3 },
+    { id: "store", label: "Storefront", icon: Store },
+    { id: "orders", label: "Manage Orders", icon: ShoppingBag },
+    { id: "ads", label: "Advertisements", icon: Megaphone },
+    { id: "settings", label: "Account Settings", icon: Settings },
+  ];
+
+  const TABS = isSeller ? SELLER_TABS : BUYER_TABS;
 
   return (
     <div className="flex min-h-screen w-full bg-[#08080a] text-[#FAF9F6] font-sans pt-24 pb-12 px-6 md:px-12">
@@ -57,7 +69,7 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                 {user.name || "User"}
               </h2>
               <p className="mt-0.5 text-[10px] font-mono uppercase tracking-widest text-[#DFBA73]">
-                Buyer Account
+                {isSeller ? "Brand Account" : "Buyer Account"}
               </p>
             </div>
           </div>
@@ -106,7 +118,7 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                 <div className="space-y-8">
                   <header>
                     <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
-                      Dashboard // Overview
+                      Dashboard // {isSeller ? 'Analytics' : 'Overview'}
                     </p>
                     <h1 className="text-3xl font-light tracking-wide">
                       Welcome back,{' '}
@@ -116,24 +128,44 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                     </h1>
                   </header>
                   
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Stat Cards */}
-                    <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                      <ShoppingBag className="w-5 h-5 text-[#DFBA73] mb-4" />
-                      <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Total Orders</p>
-                      <p className="text-2xl font-light mt-1">0</p>
+                  {isSeller ? (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <BarChart3 className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Total Revenue</p>
+                        <p className="text-2xl font-light mt-1 text-[#DFBA73]">Rs. 0</p>
+                      </div>
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <ShoppingBag className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Orders to Fulfill</p>
+                        <p className="text-2xl font-light mt-1">0</p>
+                      </div>
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <Store className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Store Views</p>
+                        <p className="text-2xl font-light mt-1">0</p>
+                      </div>
                     </div>
-                    <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                      <Heart className="w-5 h-5 text-[#DFBA73] mb-4" />
-                      <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Saved Items</p>
-                      <p className="text-2xl font-light mt-1">12</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {/* Stat Cards */}
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <ShoppingBag className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Total Orders</p>
+                        <p className="text-2xl font-light mt-1">0</p>
+                      </div>
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <Heart className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Saved Items</p>
+                        <p className="text-2xl font-light mt-1">12</p>
+                      </div>
+                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
+                        <LayoutDashboard className="w-5 h-5 text-[#DFBA73] mb-4" />
+                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Active Boards</p>
+                        <p className="text-2xl font-light mt-1">3</p>
+                      </div>
                     </div>
-                    <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                      <LayoutDashboard className="w-5 h-5 text-[#DFBA73] mb-4" />
-                      <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Active Boards</p>
-                      <p className="text-2xl font-light mt-1">3</p>
-                    </div>
-                  </div>
+                  )}
 
                   {/* Recent Activity placeholder */}
                   <div className="mt-8">
@@ -145,25 +177,67 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                 </div>
               )}
 
+              {activeTab === "store" && isSeller && (
+                <div className="space-y-8">
+                  <header>
+                    <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
+                      Dashboard // Storefront
+                    </p>
+                    <h1 className="text-3xl font-light tracking-wide">Manage Store</h1>
+                  </header>
+                  <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                    <Store className="w-8 h-8 text-[#52525B] mb-3" />
+                    <p className="text-[13px] text-[#7C7C83] font-light">Your store is currently empty.</p>
+                    <button className="mt-4 px-5 py-2 rounded-full bg-[#DFBA73] text-[#08080a] text-[11px] font-mono uppercase tracking-widest hover:bg-[#E8D9B5] transition-colors">
+                      Upload First Product
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === "ads" && isSeller && (
+                <div className="space-y-8">
+                  <header>
+                    <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
+                      Dashboard // Advertisements
+                    </p>
+                    <h1 className="text-3xl font-light tracking-wide">Promote Products</h1>
+                  </header>
+                  <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                    <Megaphone className="w-8 h-8 text-[#52525B] mb-3" />
+                    <p className="text-[13px] text-[#7C7C83] font-light">Feature your products on the homepage.</p>
+                    <button className="mt-4 px-5 py-2 rounded-full border border-[#DFBA73]/30 text-[#DFBA73] text-[11px] font-mono uppercase tracking-widest hover:bg-[#DFBA73]/10 transition-colors">
+                      Create Campaign
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {activeTab === "orders" && (
                 <div className="space-y-8">
                   <header>
                     <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
                       Dashboard // Orders
                     </p>
-                    <h1 className="text-3xl font-light tracking-wide">My Orders</h1>
+                    <h1 className="text-3xl font-light tracking-wide">
+                      {isSeller ? "Manage Orders" : "My Orders"}
+                    </h1>
                   </header>
                   <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
                     <ShoppingBag className="w-8 h-8 text-[#52525B] mb-3" />
-                    <p className="text-[13px] text-[#7C7C83] font-light">You haven't placed any orders yet.</p>
-                    <button className="mt-4 px-5 py-2 rounded-full bg-[#DFBA73] text-[#08080a] text-[11px] font-mono uppercase tracking-widest hover:bg-[#E8D9B5] transition-colors">
-                      Start Shopping
-                    </button>
+                    <p className="text-[13px] text-[#7C7C83] font-light">
+                      {isSeller ? "You have no pending orders." : "You haven't placed any orders yet."}
+                    </p>
+                    {!isSeller && (
+                      <button className="mt-4 px-5 py-2 rounded-full bg-[#DFBA73] text-[#08080a] text-[11px] font-mono uppercase tracking-widest hover:bg-[#E8D9B5] transition-colors">
+                        Start Shopping
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
 
-              {activeTab === "boards" && (
+              {activeTab === "boards" && !isSeller && (
                 <div className="space-y-8">
                   <header>
                     <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">

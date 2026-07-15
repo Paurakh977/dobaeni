@@ -1,7 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { twoFactor } from 'better-auth/plugins';
-import { username } from 'better-auth/plugins';
+import { twoFactor, username, organization } from 'better-auth/plugins';
 import { nextCookies } from 'better-auth/next-js';
 import { db } from '@/lib/db';
 import { sendEmail } from '@/lib/email';
@@ -161,6 +160,22 @@ export const auth = betterAuth({
     deleteUser: {
       enabled: true,
     },
+    additionalFields: {
+      role: {
+        type: 'string',
+        required: false,
+        defaultValue: 'buyer',
+      },
+      interests: {
+        type: 'string', // JSON string array of interests
+        required: false,
+      },
+      onboardingCompleted: {
+        type: 'boolean',
+        required: false,
+        defaultValue: false,
+      }
+    }
   },
 
   advanced: {
@@ -183,6 +198,23 @@ export const auth = betterAuth({
     username({
       minUsernameLength: 3,
       maxUsernameLength: 30,
+    }),
+
+    organization({
+      allowUserToCreateOrganization: true,
+      organizationLimit: 5,
+      membershipLimit: 100,
+      schema: {
+        organization: {
+          additionalFields: {
+            banner: { type: 'string', required: false },
+            description: { type: 'string', required: false },
+            contactEmail: { type: 'string', required: false },
+            contactPhone: { type: 'string', required: false },
+            status: { type: 'string', required: false, defaultValue: 'active' },
+          }
+        }
+      }
     }),
 
     twoFactor({

@@ -13,7 +13,13 @@ export default async function DashboardPage() {
   const user = session.user as typeof session.user & {
     twoFactorEnabled?: boolean | null;
     image?: string | null;
+    role?: string | null;
+    onboardingCompleted?: boolean | null;
   };
+
+  if (!user.onboardingCompleted) {
+    redirect('/onboarding');
+  }
 
   return (
     <DashboardClient 

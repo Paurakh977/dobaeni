@@ -11,7 +11,7 @@ import {
   useSpring,
   useTransform,
 } from 'framer-motion';
-import { Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Mail, Lock, User, Eye, EyeOff, Loader2, Store, ShoppingBag } from 'lucide-react';
 import { authClient } from '@/lib/auth-client';
 
 // ---------------------------------------------------------------------------
@@ -22,6 +22,7 @@ interface FormData {
   email: string;
   password: string;
   username: string;
+  role: 'buyer' | 'seller';
 }
 
 type Mode = 'signin' | 'signup';
@@ -111,7 +112,7 @@ export default function LoginSignupForm() {
   const [message, setMessage] = useState<{ text: string; type: MessageType } | null>(null);
   const [loading, setLoading] = useState<Provider | null>(null);
   const [success, setSuccess] = useState<{ name: string } | null>(null);
-  const [formData, setFormData] = useState<FormData>({ email: '', password: '', username: '' });
+  const [formData, setFormData] = useState<FormData>({ email: '', password: '', username: '', role: 'buyer' });
 
   const isSignUp = mode === 'signup';
 
@@ -122,10 +123,10 @@ export default function LoginSignupForm() {
     setMode(next);
     setShowPassword(false);
     setMessage(null);
-    setFormData({ email: '', password: '', username: '' });
+    setFormData({ email: '', password: '', username: '', role: 'buyer' });
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement> | { target: { name: string; value: string } }) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
     if (message) setMessage(null);
@@ -147,11 +148,19 @@ export default function LoginSignupForm() {
 
     try {
       if (isSignUp) {
+        // Better Auth's username plugin only allows [a-zA-Z0-9_.]; slugify the
+        // (possibly multi-word) brand/username into a valid, unique handle.
+        const usernameHandle = formData.username
+          .toLowerCase()
+          .replace(/\s+/g, '')
+          .replace(/[^a-z0-9_.]/g, '');
+
         const { error } = await authClient.signUp.email({
           email: formData.email,
           password: formData.password,
           name: formData.username || formData.email.split('@')[0],
-          username: formData.username,
+          username: usernameHandle,
+          role: formData.role, // custom field
         });
         if (error) throw new Error(error.message);
 
@@ -653,7 +662,7 @@ function FormFields({
 }: {
   mode: Mode;
   formData: FormData;
-  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onChange: (e: React.ChangeEvent<HTMLInputElement> | { target: { name: string; value: string } }) => void;
   showPassword: boolean;
   onTogglePassword: () => void;
 }) {
@@ -661,15 +670,48 @@ function FormFields({
     <>
       <AnimatePresence mode="popLayout">
         {mode === 'signup' && (
+          <motion.div key="signup-role" variants={fieldVariants} exit={{ opacity: 0, y: -6 }}>
+            <div className="flex gap-3 mb-2">
+              <button
+                type="button"
+                onClick={() => onChange({ target: { name: 'role', value: 'buyer' } })}
+                className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all duration-300 ${
+                  formData.role === 'buyer' 
+                    ? 'border-[#DFBA73] bg-[#DFBA73]/10 text-[#DFBA73]' 
+                    : 'border-white/[0.04] bg-white/[0.02] text-[#7C7C83] hover:border-white/[0.08]'
+                }`}
+              >
+                <ShoppingBag size={14} />
+                <span className="text-[11px] font-mono uppercase tracking-widest">Buyer</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onChange({ target: { name: 'role', value: 'seller' } })}
+                className={`flex-1 py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all duration-300 ${
+                  formData.role === 'seller' 
+                    ? 'border-[#DFBA73] bg-[#DFBA73]/10 text-[#DFBA73]' 
+                    : 'border-white/[0.04] bg-white/[0.02] text-[#7C7C83] hover:border-white/[0.08]'
+                }`}
+              >
+                <Store size={14} />
+                <span className="text-[11px] font-mono uppercase tracking-widest">Brand</span>
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence mode="popLayout">
+        {mode === 'signup' && (
           <motion.div key="signup-username" variants={fieldVariants} exit={{ opacity: 0, y: -6 }}>
-               <Field icon={<User size={12} strokeWidth={1.5} />} label="Username" index="[01]">
+               <Field icon={formData.role === 'seller' ? <Store size={12} strokeWidth={1.5} /> : <User size={12} strokeWidth={1.5} />} label={formData.role === 'seller' ? "Brand Name" : "Username"} index="[01]">
               <input
                 type="text"
                 name="username"
-                placeholder="John Doe"
+                placeholder={formData.role === 'seller' ? "My Brand" : "John Doe"}
                 required
                 value={formData.username}
-                onChange={onChange}
+                onChange={onChange as any}
                 className="w-full bg-transparent px-3.5 py-3 text-[13px] font-light text-[#FAF9F6] outline-none placeholder:text-[#424247]"
               />
             </Field>
