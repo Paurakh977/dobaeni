@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   AnimatePresence,
   motion,
@@ -11,7 +12,7 @@ import {
   useTransform,
 } from 'framer-motion';
 import { Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { signIn } from 'next-auth/react';
+import { authClient } from '@/lib/auth-client';
 
 // ---------------------------------------------------------------------------
 // Types & Interfaces
@@ -103,6 +104,7 @@ function Magnetic({ children, strength = 15 }: { children: React.ReactNode; stre
 
 export default function LoginSignupForm() {
   const reduceMotion = useReducedMotion();
+  const router = useRouter();
 
   const [mode, setMode] = useState<Mode>('signin');
   const [showPassword, setShowPassword] = useState(false);
@@ -144,25 +146,37 @@ export default function LoginSignupForm() {
     setLoading('manual');
 
     try {
-      const endpoint = isSignUp ? '/api/auth/register' : '/api/auth/login';
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Something went wrong.');
-      }
-
       if (isSignUp) {
-        setMessage({ type: 'success', text: 'Account created! Redirecting to sign in...' });
-        window.setTimeout(() => switchMode('signin'), 1500);
+        const { error } = await authClient.signUp.email({
+          email: formData.email,
+          password: formData.password,
+          name: formData.username || formData.email.split('@')[0],
+          username: formData.username,
+        });
+        if (error) throw new Error(error.message);
+
+        setMessage({
+          type: 'success',
+          text: 'Account created! Check your email to verify, then sign in.',
+        });
+        window.setTimeout(() => switchMode('signin'), 1800);
       } else {
-        setSuccess({ name: data.username || data.email?.split('@')[0] || 'Member' });
+        const { data, error } = await authClient.signIn.email({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw new Error(error.message);
+
+        // 2FA required → twoFactorClient redirects to /2fa automatically.
+        if ((data as { twoFactorRedirect?: boolean } | undefined)?.twoFactorRedirect)
+          return;
+
+        setSuccess({
+          name: data?.user?.name || formData.email.split('@')[0] || 'Member',
+        });
         window.setTimeout(() => {
-          window.location.href = '/dashboard';
+          router.push('/dashboard');
         }, reduceMotion ? 200 : 1400);
       }
     } catch (err) {
@@ -179,7 +193,12 @@ export default function LoginSignupForm() {
     setMessage(null);
     setLoading(provider);
     try {
-      await signIn(provider, { callbackUrl: '/dashboard' });
+      await authClient.signIn.social({
+        provider,
+        callbackURL: '/dashboard',
+        errorCallbackURL: '/login',
+      });
+      // Provider handles the redirect (302) — keep loading until navigation.
     } catch {
       setMessage({ type: 'error', text: `Could not sign in with ${provider}.` });
       setLoading(null);
@@ -755,7 +774,7 @@ function Field({ icon, label, index, children }: { icon: React.ReactNode; label:
 function ForgotPassword() {
   return (
     <motion.div variants={fieldVariants} className="text-right -mt-2">
-      <a href="#" className="inline-block text-[11px] font-light text-[#52525B] transition-all hover:text-[#FAF9F6]">
+      <a href="/forgot-password" className="inline-block text-[11px] font-light text-[#52525B] transition-all hover:text-[#FAF9F6]">
         Forgot password?
       </a>
     </motion.div>
