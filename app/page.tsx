@@ -30,7 +30,7 @@ export default function Home() {
       <CustomCursor />
       <Navbar />
       <main>
-        <Hero />
+        <Hero isIntro />
         <Marquee />
         <RevealSection />
         <GallerySection />
