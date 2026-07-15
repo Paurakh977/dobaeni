@@ -1,10 +1,15 @@
-// Prisma schema for Better Auth (PostgreSQL)
-// Canonical Better Auth v1.x schema for: user / session / account / verification,
-// plus the two-factor plugin (`twoFactor` table) and username plugin fields.
-// After installing deps you can re-sync with:
-//   bunx @better-auth/cli generate --output prisma/schema.prisma
-// then apply with:
-//   bunx prisma migrate dev --name init
+// Prisma schema for Dobaeni — Visual Commerce Platform (MVP)
+// ---------------------------------------------------------------------------
+// BETTER AUTH managed models: user, session, account, verification,
+// twoFactor, organization, member, invitation.
+//   - Do NOT rename/remove their core columns; Better Auth expects them.
+//   - Extra columns on those models MUST be declared in `lib/auth.ts`
+//     (user.additionalFields / organization.schema.additionalFields).
+//
+// DOMAIN models (Product, Order, Board, Conversation, ...): free to design.
+//
+// Apply with:  bunx prisma migrate dev --name init
+// ---------------------------------------------------------------------------
 
 generator client {
   provider = "prisma-client-js"
@@ -14,6 +19,10 @@ datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
+// ===========================================================================
+// BETTER AUTH CORE
+// ===========================================================================
 
 model User {
   id            String   @id @default(cuid())
@@ -31,18 +40,28 @@ model User {
   username        String? @unique
   displayUsername String?
 
-  // custom fields
-  role                String?  @default("buyer")
-  interests           String?
+  // custom auth fields (declared in lib/auth.ts -> user.additionalFields)
+  role                String?  @default("buyer") // buyer | seller
+  interests           String? // JSON array of selected aesthetics
   onboardingCompleted Boolean? @default(false)
 
-  sessions    Session[]
-  accounts    Account[]
-  twoFactors  TwoFactor[]
-  members     Member[]
-  invitations Invitation[]
-  orders      Order[]
-  boards      Board[]
+  // relations
+  sessions         Session[]
+  accounts         Account[]
+  twoFactors       TwoFactor[]
+  buyerProfile     BuyerProfile?
+  members          Member[]
+  invitations      Invitation[]
+  orders           Order[]
+  boards           Board[]
+  reviews          Review[]
+  addresses        Address[]
+  conversations    Conversation[] @relation("UserConversations")
+  messages         Message[]      @relation("UserMessages")
+  notifications    Notification[]
+  follows          Follow[]       @relation("Follower")
+  productViews     ProductView[]
+  cart             Cart?
 
   @@map("user")
 }
@@ -110,9 +129,13 @@ model TwoFactor {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@map("twoFactor")
   @@index([secret])
+  @@map("twoFactor")
 }
+
+// ===========================================================================
+// ORGANIZATION (Better Auth org plugin) — extended SELLER / BRAND profile
+// ===========================================================================
 
 model Organization {
   id        String   @id
@@ -122,18 +145,46 @@ model Organization {
   createdAt DateTime @default(now())
   metadata  String?
 
-  // Custom seller fields
-  banner       String?
-  description  String?
-  contactEmail String?
-  contactPhone String?
-  status       String?      @default("active")
-  members      Member[]
-  invitations  Invitation[]
+  // ── Brand storefront basics (auth additionalFields) ──
+  banner        String?
+  description    String?
+  contactEmail   String?
+  contactPhone   String?
+  status         String?  @default("active") // active | suspended | pending
 
-  // Relations
-  products Product[]
-  orders   Order[]
+  // ── Extended brand profile (auth additionalFields) ──
+  legalName        String?
+  address          String?
+  city             String?
+  country          String?  @default("Nepal")
+  latitude         Float? // for "nearby store" notifications
+  longitude        Float?
+  businessType     String? // boutique | designer | streetwear | thrift | label
+  websiteUrl       String?
+  socialLinks      String? // JSON: { instagram, tiktok, facebook, ... }
+  establishedYear  Int?
+  taxId            String?
+  verificationStatus String? @default("unverified") // unverified | pending | verified
+  isVerified       Boolean? @default(false)
+  isPublished      Boolean? @default(true)
+  shippingPolicy   String?
+  returnPolicy     String?
+  tier             String?  @default("none") // none | silver | gold | platinum (trust badge)
+
+  // ── Denormalized metrics (updated via Prisma, NOT auth) ──
+  ratingAvg     Float? @default(0)
+  ratingCount   Int?   @default(0)
+  followerCount Int?   @default(0)
+  viewCount     Int?   @default(0)
+
+  // relations
+  members        Member[]
+  invitations    Invitation[]
+  products       Product[]
+  orders         Order[]
+  promotions     Promotion[]
+  follows        Follow[]        @relation("FollowedOrg")
+  conversations  Conversation[]  @relation("OrgConversations")
 
   @@map("organization")
 }
@@ -170,84 +221,205 @@ model Invitation {
   @@index([email])
 }
 
-model Product {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name           String
-  description    String?
-  price          Float
-  images         String // JSON array of URLs (can be a stringified JSON array or scalar list)
-  sizes          String? // JSON array of sizes
-  colors         String? // JSON array of colors
-  stock          Int          @default(0)
-  styleKeywords  String? // JSON array of styles like Old Money, Y2K, etc.
-  categoryId     String?
-  category       Category?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+// ===========================================================================
+// BUYER PROFILE (separate from auth User — updated via Prisma)
+// ===========================================================================
+
+model BuyerProfile {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Identity / personalization
+  gender       String? // male | female | non_binary | prefer_not
+  ageRange     String? // "13-17" | "18-24" | "25-34" | "35-44" | "45+"
+  dateOfBirth  DateTime?
+  phone        String?
+  city         String?
+  country      String?  @default("Nepal")
+  bio          String?
+  avatarUrl    String?
+
+  // Style & shopping preferences (JSON arrays / scalars)
+  sizePrefs           String? // JSON: { tops, bottoms, shoes, dress }
+  budgetRange         String? // low | mid | high | premium
+  preferredCategories String? // JSON array of category ids/slugs
+  preferredOccasions  String? // JSON: [date_night, work, vacation, ...]
+  styleIntensity      String? // minimal | balanced | maximal
+  preferredGenders    String? // JSON: [male, female, unisex]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Address {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label        String?  // Home | Work | Other
+  recipientName String
+  phone        String
+  line1        String
+  line2        String?
+  city         String
+  state        String?
+  postalCode   String?
+  country      String?  @default("Nepal")
+  latitude     Float?
+  longitude    Float?
+  isDefault    Boolean? @default(false)
+
+  orders Order[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orderItems OrderItem[]
-  savedItems SavedItem[]
-
-  @@index([organizationId])
-  @@index([categoryId])
-  @@map("product")
+  @@index([userId])
 }
+
+// ===========================================================================
+// CATALOG
+// ===========================================================================
 
 model Category {
   id          String    @id @default(cuid())
   name        String
   slug        String    @unique
   description String?
-  products    Product[]
+  image       String?
+  isActive    Boolean?  @default(true)
+  parentId    String?
+  parent      Category?  @relation("CategoryParent", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryParent")
 
+  products Product[]
+
+  @@index([parentId])
   @@map("category")
 }
 
-model Order {
-  id              String       @id @default(cuid())
-  organizationId  String
-  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  buyerId         String
-  buyer           User         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
-  totalAmount     Float
-  status          String       @default("pending") // pending, processing, packed, out_for_delivery, delivered, cancelled
-  paymentMethod   String
-  shippingAddress String
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+model Product {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String?      @unique
+  description    String?
+  price          Float
+  compareAtPrice Float? // original price — used to show discounts
+  costPrice      Float?
+  currency       String?      @default("NPR")
+  sku            String?
+  stock          Int          @default(0)
+  lowStockThreshold Int?      @default(5)
 
-  items OrderItem[]
+  // Attributes
+  sizes        String? // JSON array
+  colors       String? // JSON array
+  styleKeywords String? // JSON array of aesthetics (Old Money, Y2K, ...)
+  gender       String? // unisex | male | female
+  occasion     String? // JSON array
+  material     String?
+  tags         String? // JSON array
+
+  // Catalog state
+  isPublished Boolean? @default(false)
+  isFeatured  Boolean? @default(false)
+  isActive    Boolean? @default(true)
+
+  // Denormalized metrics
+  ratingAvg Float? @default(0)
+  ratingCount Int?  @default(0)
+  soldCount Int?    @default(0)
+  viewCount Int?    @default(0)
+
+  // Logistics
+  weight       Float?
+  seoTitle       String?
+  seoDescription String?
+
+  categoryId String?
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  images       ProductImage[]
+  orderItems   OrderItem[]
+  savedItems   SavedItem[]
+  cartItems    CartItem[]
+  reviews      Review[]
+  promotions   Promotion[]
+  productViews ProductView[]
 
   @@index([organizationId])
-  @@index([buyerId])
-  @@map("order")
+  @@index([categoryId])
+  @@index([isPublished])
+  @@map("product")
 }
 
-model OrderItem {
-  id        String  @id @default(cuid())
-  orderId   String
-  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+model ProductImage {
+  id        String   @id @default(cuid())
   productId String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  quantity  Int
-  price     Float // price at the time of purchase
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  position  Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@map("productImage")
+}
+
+// ===========================================================================
+// CART & WISHLIST / BOARDS
+// ===========================================================================
+
+model Cart {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items CartItem[]
+
+  @@map("cart")
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  cartId    String
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
   size      String?
   color     String?
+  priceSnapshot Float // price captured at time of add
 
-  @@index([orderId])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId, size, color])
+  @@index([cartId])
   @@index([productId])
-  @@map("orderItem")
+  @@map("cartItem")
 }
 
+// Pinterest-style boards; type "wishlist" is the user's single wishlist.
 model Board {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String
-  isPrivate Boolean  @default(false)
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String?
+  description String?
+  coverImage  String?
+  type        String?  @default("collection") // collection | wishlist
+  isPrivate   Boolean? @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -263,8 +435,234 @@ model SavedItem {
   board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
   productId String
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  note      String?
+
   createdAt DateTime @default(now())
 
   @@unique([boardId, productId])
+  @@index([boardId])
+  @@index([productId])
   @@map("savedItem")
+}
+
+// ===========================================================================
+// ORDERS
+// ===========================================================================
+
+model Order {
+  id              String       @id @default(cuid())
+  orderNumber     String       @unique
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  buyerId         String
+  buyer           User         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  addressId       String?
+  address         Address?     @relation(fields: [addressId], references: [id], onDelete: SetNull)
+
+  subtotal    Float
+  shippingFee Float?  @default(0)
+  tax         Float?  @default(0)
+  discount    Float?  @default(0)
+  totalAmount Float
+  currency    String? @default("NPR")
+
+  status        String @default("pending") // pending | processing | packed | out_for_delivery | delivered | cancelled | refunded
+  paymentMethod String // cod | esewa | khalti | bank | card
+  paymentStatus String? @default("pending") // pending | paid | failed | refunded
+
+  trackingNumber String?
+  courierName    String?
+  estimatedDelivery DateTime?
+  deliveredAt      DateTime?
+  cancelReason     String?
+  notes            String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items        OrderItem[]
+  reviews      Review[]
+  conversations Conversation[]
+
+  @@index([organizationId])
+  @@index([buyerId])
+  @@index([status])
+  @@map("order")
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int
+  price     Float // unit price at purchase
+  discount  Float? @default(0)
+  size      String?
+  color     String?
+
+  // Snapshots (preserve history if product is edited/deleted)
+  productName  String?
+  productImage String?
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("orderItem")
+}
+
+// ===========================================================================
+// REVIEWS & RATINGS
+// ===========================================================================
+
+model Review {
+  id         String   @id @default(cuid())
+  productId  String
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orderId    String?
+  order      Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  rating   Int // 1-5
+  title    String?
+  comment  String?
+  images   String? // JSON array
+  isVerifiedPurchase Boolean? @default(false)
+  helpfulCount Int?   @default(0)
+
+  sellerReply     String?
+  sellerRepliedAt DateTime?
+
+  status String? @default("approved") // pending | approved | rejected
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([productId])
+  @@index([userId])
+  @@map("review")
+}
+
+// ===========================================================================
+// CHAT (buyer <-> seller)
+// ===========================================================================
+
+model Conversation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation("OrgConversations", fields: [organizationId], references: [id], onDelete: Cascade)
+  buyerId        String
+  buyer          User         @relation("UserConversations", fields: [buyerId], references: [id], onDelete: Cascade)
+  orderId        String?
+  order          Order?       @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  lastMessageAt DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  messages Message[]
+
+  @@index([organizationId])
+  @@index([buyerId])
+  @@map("conversation")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User         @relation("UserMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  content        String
+  attachments    String? // JSON array of URLs
+  readAt         DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@map("message")
+}
+
+// ===========================================================================
+// SOCIAL / NOTIFICATIONS / ANALYTICS
+// ===========================================================================
+
+// Follow brands (and could follow users later via followerType)
+model Follow {
+  id             String       @id @default(cuid())
+  followerId     String
+  follower       User         @relation("Follower", fields: [followerId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation("FollowedOrg", fields: [organizationId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@unique([followerId, organizationId])
+  @@index([followerId])
+  @@index([organizationId])
+  @@map("follow")
+}
+
+model Notification {
+  id      String   @id @default(cuid())
+  userId  String
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type    String // order_update | nearby_store | review | message | promo | follow
+  title   String
+  body    String?
+  data    String? // JSON payload
+  readAt  DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("notification")
+}
+
+// Product view events — powers analytics + "recently viewed" + recommendations
+model ProductView {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  source    String? // feed | search | board | recommendation | product_page
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([productId])
+  @@index([userId])
+  @@map("productView")
+}
+
+// ===========================================================================
+// ADVERTISING / PROMOTIONS
+// ===========================================================================
+
+model Promotion {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?     @relation(fields: [productId], references: [id], onDelete: SetNull)
+  title          String
+  type           String // homepage | collection | search
+  status         String? @default("draft") // draft | active | paused | ended
+  budget         Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  targetStyles   String? // JSON array of aesthetics to target
+
+  impressions Int? @default(0)
+  clicks      Int? @default(0)
+  isActive    Boolean? @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([organizationId])
+  @@index([productId])
+  @@map("promotion")
 }

@@ -212,6 +212,25 @@ export const auth = betterAuth({
             contactEmail: { type: 'string', required: false },
             contactPhone: { type: 'string', required: false },
             status: { type: 'string', required: false, defaultValue: 'active' },
+
+            // Extended brand profile (mirrors prisma/schema.prisma Organization)
+            legalName: { type: 'string', required: false },
+            address: { type: 'string', required: false },
+            city: { type: 'string', required: false },
+            country: { type: 'string', required: false, defaultValue: 'Nepal' },
+            latitude: { type: 'number', required: false },
+            longitude: { type: 'number', required: false },
+            businessType: { type: 'string', required: false },
+            websiteUrl: { type: 'string', required: false },
+            socialLinks: { type: 'string', required: false },
+            establishedYear: { type: 'number', required: false },
+            taxId: { type: 'string', required: false },
+            verificationStatus: { type: 'string', required: false, defaultValue: 'unverified' },
+            isVerified: { type: 'boolean', required: false, defaultValue: false },
+            isPublished: { type: 'boolean', required: false, defaultValue: true },
+            shippingPolicy: { type: 'string', required: false },
+            returnPolicy: { type: 'string', required: false },
+            tier: { type: 'string', required: false, defaultValue: 'none' },
           }
         }
       }
