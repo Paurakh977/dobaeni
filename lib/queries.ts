@@ -244,7 +244,7 @@ export async function getBrands(search?: string): Promise<BrandSummary[]> {
     ...orgSummary(o),
     description: o.description,
     businessType: o.businessType,
-    productCount: o.products.length,
+    productCount: o._count.products,
   }));
 }
 
