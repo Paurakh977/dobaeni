@@ -41,4 +41,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# seed demo images (re-download with: bun run scripts/seed-images.ts)
+/public/seed/
+
 public/uploads/*
