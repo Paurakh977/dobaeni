@@ -1,12 +1,79 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight, ArrowLeft, BarChart3, Store, Megaphone } from "lucide-react";
+import { LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight, ArrowLeft, BarChart3, Store, Megaphone, Package, Users, Star, ExternalLink, Sparkles } from "lucide-react";
 import AccountPanel from "./AccountPanel";
+import SafeImage from "@/app/components/SafeImage";
+import { formatPrice, formatDate, formatNumber } from "@/lib/format";
 
-export default function DashboardClient({ user, initialTwoFactorEnabled, emailVerified }: any) {
+const STATUS_STYLE: Record<string, string> = {
+  pending: "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  processing: "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  packed: "bg-indigo-500/10 text-indigo-300 border-indigo-500/20",
+  out_for_delivery: "bg-violet-500/10 text-violet-300 border-violet-500/20",
+  delivered: "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  cancelled: "bg-red-500/10 text-red-300 border-red-500/20",
+  refunded: "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+};
+
+function StatusPill({ status }: { status: string }) {
+  const label = status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <span className={`rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] font-mono ${STATUS_STYLE[status] || "bg-zinc-500/10 text-zinc-300 border-zinc-500/20"}`}>
+      {label}
+    </span>
+  );
+}
+
+function StatCard({ icon: Icon, label, value, sub }: { icon: any; label: string; value: string; sub?: string }) {
+  return (
+    <div className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl p-6 transition-all duration-300 hover:border-[#DFBA73]/30">
+      <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-[#DFBA73]/[0.07] blur-2xl transition-opacity duration-500 group-hover:opacity-100 opacity-0" />
+      <Icon className="w-5 h-5 text-[#DFBA73] mb-4" />
+      <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">{label}</p>
+      <p className="text-2xl font-light mt-1 text-[#FAF9F6]">{value}</p>
+      {sub && <p className="mt-1 text-[11px] font-light text-[#52525B]">{sub}</p>}
+    </div>
+  );
+}
+
+function OrderRow({ order, isSeller }: { order: any; isSeller?: boolean }) {
+  const first = order.items?.[0];
+  const extra = order.items?.length > 1 ? `+${order.items.length - 1} more` : null;
+  return (
+    <Link
+      href={isSeller ? "/dashboard/seller" : "/orders"}
+      data-cursor="hover"
+      className="flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#121215]/40 p-4 transition-all hover:border-[#DFBA73]/30"
+    >
+      <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-[#0E0E12]">
+        {first?.productImage ? (
+          <SafeImage src={first.productImage} alt={first.productName} className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[#52525B]"><Package className="w-5 h-5" /></div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <p className="truncate text-[13px] font-light text-[#FAF9F6]">{first?.productName || "Order"}</p>
+          {extra && <span className="shrink-0 text-[10px] font-light text-[#52525B]">{extra}</span>}
+        </div>
+        <p className="mt-0.5 text-[11px] font-light text-[#7C7C83]">
+          {order.orderNumber} · {formatDate(order.createdAt)}
+        </p>
+      </div>
+      <div className="flex flex-col items-end gap-1.5">
+        <StatusPill status={order.status} />
+        <span className="text-[12px] font-light text-[#DFBA73]">{formatPrice(order.totalAmount, order.currency)}</span>
+      </div>
+    </Link>
+  );
+}
+
+export default function DashboardClient({ user, initialTwoFactorEnabled, emailVerified, data }: any) {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -28,6 +95,13 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
   ];
 
   const TABS = isSeller ? SELLER_TABS : BUYER_TABS;
+
+  const boards: any[] = data?.boards ?? [];
+  const orders: any[] = data?.orders ?? [];
+  const savedItems: number = data?.savedItems ?? 0;
+  const stats: any = data?.stats;
+  const products: any[] = data?.products ?? [];
+  const recent = orders.slice(0, 4);
 
   return (
     <div className="flex min-h-screen w-full bg-[#08080a] text-[#FAF9F6] font-sans pt-24 pb-12 px-6 md:px-12">
@@ -84,8 +158,8 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
                   className={`relative flex items-center justify-between w-full px-4 py-3 rounded-2xl transition-all duration-300 ${
-                    isActive 
-                      ? "bg-white/[0.06] text-[#FAF9F6]" 
+                    isActive
+                      ? "bg-white/[0.06] text-[#FAF9F6]"
                       : "text-[#FAF9F6]/60 hover:bg-white/[0.02] hover:text-[#FAF9F6]"
                   }`}
                 >
@@ -127,52 +201,45 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                       </span>
                     </h1>
                   </header>
-                  
+
                   {isSeller ? (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <BarChart3 className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Total Revenue</p>
-                        <p className="text-2xl font-light mt-1 text-[#DFBA73]">Rs. 0</p>
-                      </div>
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <ShoppingBag className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Orders to Fulfill</p>
-                        <p className="text-2xl font-light mt-1">0</p>
-                      </div>
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <Store className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Store Views</p>
-                        <p className="text-2xl font-light mt-1">0</p>
-                      </div>
+                      <StatCard icon={BarChart3} label="Total Revenue" value={stats ? formatPrice(stats.revenue) : "—"} sub={stats ? `${stats.orders} lifetime orders` : undefined} />
+                      <StatCard icon={ShoppingBag} label="Orders to Fulfill" value={stats ? `${stats.pendingOrders}` : "0"} sub={stats ? `${stats.orders} total` : undefined} />
+                      <StatCard icon={Store} label="Store Views" value={stats ? formatNumber(stats.views) : "0"} sub={stats ? `${formatNumber(stats.followers)} followers` : undefined} />
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {/* Stat Cards */}
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <ShoppingBag className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Total Orders</p>
-                        <p className="text-2xl font-light mt-1">0</p>
-                      </div>
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <Heart className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Saved Items</p>
-                        <p className="text-2xl font-light mt-1">12</p>
-                      </div>
-                      <div className="p-6 rounded-2xl border border-white/[0.06] bg-[#121215]/40 backdrop-blur-xl">
-                        <LayoutDashboard className="w-5 h-5 text-[#DFBA73] mb-4" />
-                        <p className="text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Active Boards</p>
-                        <p className="text-2xl font-light mt-1">3</p>
-                      </div>
+                      <StatCard icon={ShoppingBag} label="Total Orders" value={`${orders.length}`} />
+                      <StatCard icon={Heart} label="Saved Items" value={`${savedItems}`} />
+                      <StatCard icon={LayoutDashboard} label="Active Boards" value={`${boards.length}`} />
                     </div>
                   )}
 
-                  {/* Recent Activity placeholder */}
-                  <div className="mt-8">
-                    <h3 className="text-sm font-medium tracking-wide mb-4 text-[#FAF9F6]">Recent Activity</h3>
-                    <div className="h-48 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex items-center justify-center border-dashed">
-                      <p className="text-xs text-[#7C7C83] font-light">No recent activity</p>
+                  {/* Recent Activity */}
+                  <div className="mt-2">
+                    <div className="mb-4 flex items-center justify-between">
+                      <h3 className="text-sm font-medium tracking-wide text-[#FAF9F6]">Recent Activity</h3>
+                      <Link
+                        href={isSeller ? "/dashboard/seller" : (orders.length ? "/orders" : "/discover")}
+                        className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#DFBA73]/80 hover:text-[#DFBA73] transition-colors"
+                      >
+                        {isSeller ? "Manage" : "View all"}
+                      </Link>
                     </div>
+                    {recent.length ? (
+                      <div className="space-y-3">
+                        {recent.map((o: any) => (
+                          <OrderRow key={o.id} order={o} isSeller={isSeller} />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="h-40 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex items-center justify-center border-dashed">
+                        <p className="text-xs text-[#7C7C83] font-light">
+                          {isSeller ? "No orders yet — your sales will appear here." : "No orders yet. Start exploring."}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -183,15 +250,41 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                     <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
                       Dashboard // Storefront
                     </p>
-                    <h1 className="text-3xl font-light tracking-wide">Manage Store</h1>
+                    <h1 className="text-3xl font-light tracking-wide">Your Products</h1>
                   </header>
-                  <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
-                    <Store className="w-8 h-8 text-[#52525B] mb-3" />
-                    <p className="text-[13px] text-[#7C7C83] font-light">Your store is currently empty.</p>
-                    <button className="mt-4 px-5 py-2 rounded-full bg-[#DFBA73] text-[#08080a] text-[11px] font-mono uppercase tracking-widest hover:bg-[#E8D9B5] transition-colors">
-                      Upload First Product
-                    </button>
-                  </div>
+                  {products.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {products.map((p: any) => (
+                        <div key={p.id} className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#121215]/40">
+                          <div className="relative aspect-[4/5] bg-[#0E0E12]">
+                            {p.image ? (
+                              <SafeImage src={p.image} alt={p.name} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                            ) : (
+                              <div className="flex h-full w-full items-center justify-center text-[#52525B]"><Package className="w-8 h-8" /></div>
+                            )}
+                            {!p.isPublished && (
+                              <span className="absolute left-3 top-3 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-[9px] uppercase tracking-[0.18em] font-mono text-amber-300">Draft</span>
+                            )}
+                          </div>
+                          <div className="p-4">
+                            <p className="truncate text-[13px] font-light text-[#FAF9F6]">{p.name}</p>
+                            <div className="mt-1 flex items-center justify-between">
+                              <span className="text-[12px] font-light text-[#DFBA73]">{formatPrice(p.price, p.currency)}</span>
+                              <span className="text-[11px] font-light text-[#7C7C83]">{p.soldCount} sold</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                      <Store className="w-8 h-8 text-[#52525B] mb-3" />
+                      <p className="text-[13px] text-[#7C7C83] font-light">Your store is currently empty.</p>
+                      <Link href="/dashboard/seller" className="mt-4 rounded-full bg-[#DFBA73] px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#08080a] transition-colors hover:bg-[#E8D9B5]">
+                        Manage Store
+                      </Link>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -201,14 +294,19 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                     <p className="text-[10px] font-mono uppercase tracking-[0.3em] text-[#52525B] mb-2">
                       Dashboard // Advertisements
                     </p>
-                    <h1 className="text-3xl font-light tracking-wide">Promote Products</h1>
+                    <h1 className="text-3xl font-light tracking-wide">Promotions</h1>
                   </header>
-                  <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <StatCard icon={Sparkles} label="Products Listed" value={`${products.length}`} />
+                    <StatCard icon={Star} label="Avg. Rating" value={stats ? (stats.avgRating ? stats.avgRating.toFixed(1) : "—") : "—"} />
+                    <StatCard icon={Users} label="Followers" value={stats ? formatNumber(stats.followers) : "0"} />
+                  </div>
+                  <div className="h-48 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
                     <Megaphone className="w-8 h-8 text-[#52525B] mb-3" />
-                    <p className="text-[13px] text-[#7C7C83] font-light">Feature your products on the homepage.</p>
-                    <button className="mt-4 px-5 py-2 rounded-full border border-[#DFBA73]/30 text-[#DFBA73] text-[11px] font-mono uppercase tracking-widest hover:bg-[#DFBA73]/10 transition-colors">
-                      Create Campaign
-                    </button>
+                    <p className="text-[13px] text-[#7C7C83] font-light">Feature your products with a promotion campaign.</p>
+                    <Link href="/dashboard/seller" className="mt-4 flex items-center gap-2 rounded-full border border-[#DFBA73]/30 px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#DFBA73] transition-colors hover:bg-[#DFBA73]/10">
+                      Open Promotions <ExternalLink className="w-3 h-3" />
+                    </Link>
                   </div>
                 </div>
               )}
@@ -223,17 +321,25 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                       {isSeller ? "Manage Orders" : "My Orders"}
                     </h1>
                   </header>
-                  <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
-                    <ShoppingBag className="w-8 h-8 text-[#52525B] mb-3" />
-                    <p className="text-[13px] text-[#7C7C83] font-light">
-                      {isSeller ? "You have no pending orders." : "You haven't placed any orders yet."}
-                    </p>
-                    {!isSeller && (
-                      <button className="mt-4 px-5 py-2 rounded-full bg-[#DFBA73] text-[#08080a] text-[11px] font-mono uppercase tracking-widest hover:bg-[#E8D9B5] transition-colors">
-                        Start Shopping
-                      </button>
-                    )}
-                  </div>
+                  {orders.length ? (
+                    <div className="space-y-3">
+                      {orders.map((o: any) => (
+                        <OrderRow key={o.id} order={o} isSeller={isSeller} />
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                      <ShoppingBag className="w-8 h-8 text-[#52525B] mb-3" />
+                      <p className="text-[13px] text-[#7C7C83] font-light">
+                        {isSeller ? "You have no orders yet." : "You haven't placed any orders yet."}
+                      </p>
+                      {!isSeller && (
+                        <Link href="/discover" className="mt-4 rounded-full bg-[#DFBA73] px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#08080a] transition-colors hover:bg-[#E8D9B5]">
+                          Start Shopping
+                        </Link>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -245,29 +351,43 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                     </p>
                     <h1 className="text-3xl font-light tracking-wide">My Boards</h1>
                   </header>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Placeholder Boards */}
-                    <div className="group relative h-48 rounded-2xl overflow-hidden cursor-pointer">
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10" />
-                      <div className="absolute inset-0 bg-[#121215] flex items-center justify-center text-[#52525B] font-light group-hover:scale-105 transition-transform duration-500">
-                        [Image Placeholder]
-                      </div>
-                      <div className="absolute bottom-4 left-4 z-20">
-                        <p className="text-sm font-medium">Winter Fits</p>
-                        <p className="text-[10px] text-[#7C7C83]">5 items</p>
-                      </div>
+                  {boards.length ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {boards.map((b: any) => (
+                        <Link
+                          key={b.id}
+                          href={`/dashboard/boards/${b.id}`}
+                          data-cursor="hover"
+                          className="group relative h-52 overflow-hidden rounded-2xl border border-white/[0.06] bg-[#121215]/40"
+                        >
+                          {b.coverImage ? (
+                            <>
+                              <div className="absolute inset-0">
+                                <SafeImage src={b.coverImage} alt={b.name} className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                              </div>
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
+                            </>
+                          ) : (
+                            <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#121215] to-[#0E0E12] text-[#52525B] font-light">
+                              <Heart className="w-7 h-7" />
+                            </div>
+                          )}
+                          <div className="absolute bottom-4 left-4 right-4 z-20">
+                            <p className="truncate text-sm font-medium text-[#FAF9F6]">{b.name}</p>
+                            <p className="text-[10px] text-[#FAF9F6]/70">{b.itemCount} {b.itemCount === 1 ? "item" : "items"}</p>
+                          </div>
+                        </Link>
+                      ))}
                     </div>
-                    <div className="group relative h-48 rounded-2xl overflow-hidden cursor-pointer">
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent z-10" />
-                      <div className="absolute inset-0 bg-[#121215] flex items-center justify-center text-[#52525B] font-light group-hover:scale-105 transition-transform duration-500">
-                        [Image Placeholder]
-                      </div>
-                      <div className="absolute bottom-4 left-4 z-20">
-                        <p className="text-sm font-medium">Wishlist</p>
-                        <p className="text-[10px] text-[#7C7C83]">7 items</p>
-                      </div>
+                  ) : (
+                    <div className="h-64 rounded-2xl border border-white/[0.04] bg-[#121215]/20 flex flex-col items-center justify-center border-dashed">
+                      <Heart className="w-8 h-8 text-[#52525B] mb-3" />
+                      <p className="text-[13px] text-[#7C7C83] font-light">You haven't created any boards yet.</p>
+                      <Link href="/discover" className="mt-4 rounded-full bg-[#DFBA73] px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#08080a] transition-colors hover:bg-[#E8D9B5]">
+                        Discover Products
+                      </Link>
                     </div>
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -279,8 +399,8 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                     </p>
                     <h1 className="text-3xl font-light tracking-wide">Account Settings</h1>
                   </header>
-                  
-                  <AccountPanel 
+
+                  <AccountPanel
                     initialTwoFactorEnabled={initialTwoFactorEnabled}
                     emailVerified={emailVerified}
                   />

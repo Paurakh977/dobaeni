@@ -1,5 +1,13 @@
 import { redirect } from 'next/navigation';
 import { getSession } from '@/lib/get-session';
+import {
+  getBoards,
+  getBuyerOrders,
+  getSellerOrg,
+  getSellerStats,
+  getSellerOrders,
+  getSellerProducts,
+} from '@/lib/queries';
 import DashboardClient from './DashboardClient';
 
 export const metadata = {
@@ -21,11 +29,35 @@ export default async function DashboardPage() {
     redirect('/onboarding');
   }
 
+  const isSeller = user.role === 'seller';
+
+  let data: any = {};
+
+  if (isSeller) {
+    const org = await getSellerOrg(user.id);
+    if (org) {
+      const [stats, orders, products] = await Promise.all([
+        getSellerStats(org.id),
+        getSellerOrders(org.id),
+        getSellerProducts(org.id),
+      ]);
+      data = { org, stats, orders, products };
+    }
+  } else {
+    const [boards, orders] = await Promise.all([
+      getBoards(user.id),
+      getBuyerOrders(user.id),
+    ]);
+    const savedItems = boards.reduce((sum: number, b: any) => sum + b.itemCount, 0);
+    data = { boards, orders, savedItems };
+  }
+
   return (
-    <DashboardClient 
-      user={user} 
+    <DashboardClient
+      user={user}
       initialTwoFactorEnabled={Boolean(user.twoFactorEnabled)}
       emailVerified={user.emailVerified}
+      data={data}
     />
   );
 }

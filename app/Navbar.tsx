@@ -7,8 +7,14 @@ import { useSession, signOut } from "@/lib/auth-client";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogOut, LayoutDashboard, Heart, Settings, ChevronDown } from "lucide-react";
 import Magnetic from "./Magnetic";
+import CartBadge from "./components/CartBadge";
 
-const LINKS = ["Discover", "Boards", "Brands", "Access"];
+const LINKS: { label: string; href: string }[] = [
+  { label: "Discover", href: "/discover" },
+  { label: "Boards", href: "/dashboard/boards" },
+  { label: "Brands", href: "/brands" },
+  { label: "Access", href: "#" },
+];
 
 export default function Navbar() {
   const { data: session, isPending } = useSession();
@@ -40,19 +46,21 @@ export default function Navbar() {
 
       <div className="hidden md:flex items-center gap-10 font-mono text-[11px] uppercase tracking-[0.25em] text-[#FAF9F6]">
         {LINKS.map((item) => (
-          <Magnetic key={item}>
+          <Magnetic key={item.label}>
             <Link
-              href={item === "Boards" ? "/dashboard/boards" : "#"}
+              href={item.href}
               data-cursor="hover"
               className="relative group py-1 text-[#FAF9F6]/80 hover:text-[#FAF9F6] transition-colors"
             >
-              {item}
+              {item.label}
               <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-[#DFBA73] transition-all duration-300 group-hover:w-full" />
             </Link>
           </Magnetic>
         ))}
       </div>
 
+      <div className="flex items-center gap-4">
+        {!isPending && session && <CartBadge />}
       <div className="relative">
         {isPending ? (
           <div className="h-9 w-24 animate-pulse rounded-full bg-white/5" />
@@ -113,7 +121,7 @@ export default function Navbar() {
 
                   <div className="mt-2 pt-2 border-t border-white/[0.08]">
                     <button
-                      onClick={() => signOut({ fetchOptions: { onSuccess: () => window.location.href = '/' } })}
+                      onClick={() => signOut({ fetchOptions: { onSuccess: () => { window.location.href = '/'; } } })}
                       className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[12px] font-light text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       <LogOut className="w-4 h-4" />
@@ -135,6 +143,7 @@ export default function Navbar() {
             </Link>
           </Magnetic>
         )}
+      </div>
       </div>
     </nav>
   );

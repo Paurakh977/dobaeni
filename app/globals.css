@@ -48,6 +48,16 @@
   font-family: 'Space Mono', monospace;
 }
 
+/* Global font helpers so feature pages work regardless of wrapper */
+.font-display {
+  font-family: 'Fraunces', serif;
+  font-optical-sizing: auto;
+}
+
+.font-mono {
+  font-family: 'Space Mono', ui-monospace, monospace;
+}
+
 @media (hover: hover) and (pointer: fine) {
   .dobaeni-page,
   .dobaeni-page * {
