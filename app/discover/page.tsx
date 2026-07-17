@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function DiscoverPage() {
   const products = await getDiscoverProducts();
   return (
-    <PageShell>
+    <PageShell padded={false}>
       <DiscoverView products={products} aesthetics={AESTHETICS} />
     </PageShell>
   );
