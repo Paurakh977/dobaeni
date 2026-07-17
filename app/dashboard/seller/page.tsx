@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/get-session';
-import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders } from '@/lib/queries';
+import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders, getSellerAnalytics } from '@/lib/queries';
 import { db } from '@/lib/db';
 import SellerDashboard from './SellerDashboard';
 import PageShell from '@/app/components/PageShell';
@@ -32,10 +32,11 @@ export default async function SellerPage() {
     );
   }
 
-  const [stats, products, orders, rawPromotions] = await Promise.all([
+  const [stats, products, orders, analytics, rawPromotions] = await Promise.all([
     getSellerStats(org.id),
     getSellerProducts(org.id),
     getSellerOrders(org.id),
+    getSellerAnalytics(org.id, 30),
     db.promotion.findMany({
       where: { organizationId: org.id },
       orderBy: { createdAt: 'desc' },
@@ -63,6 +64,7 @@ export default async function SellerPage() {
         stats={stats}
         products={products}
         orders={orders}
+        analytics={analytics}
         promotions={promotions}
       />
     </PageShell>

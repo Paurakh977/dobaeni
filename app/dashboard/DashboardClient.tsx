@@ -1,17 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight,
   ArrowLeft, BarChart3, Store, Megaphone, Package, Users, Star, ExternalLink,
-  Sparkles, TrendingUp, Activity, Zap, Clock, Grid3X3,
+  Sparkles, TrendingUp, Activity, Zap, Clock, Grid3X3, Search,
 } from "lucide-react";
 import AccountPanel from "./AccountPanel";
 import SafeImage from "@/app/components/SafeImage";
 import BoardCollagePreview from "@/app/components/BoardCollagePreview";
+import CustomCursor from "@/app/CustomCursor";
 import { formatPrice, formatDate, formatNumber } from "@/lib/format";
 
 /* ─── Design tokens ─────────────────────────────────────────────────── */
@@ -149,6 +150,104 @@ function OrderRow({ order, isSeller }: { order: any; isSeller?: boolean }) {
   );
 }
 
+/* ─── OrdersTab (search + status filter) ─────────────────────────────── */
+const ORDER_FILTERS = ["all", "pending", "processing", "packed", "out_for_delivery", "delivered", "cancelled", "refunded"];
+const ORDER_FILTER_LABEL: Record<string, string> = {
+  all: "All",
+  pending: "Pending",
+  processing: "Processing",
+  packed: "Packed",
+  out_for_delivery: "In Transit",
+  delivered: "Delivered",
+  cancelled: "Cancelled",
+  refunded: "Refunded",
+};
+
+function OrdersTab({ orders, isSeller }: { orders: any[]; isSeller: boolean }) {
+  const [query, setQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filtered = useMemo(() => {
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return orders.filter((o: any) => {
+      if (statusFilter !== "all" && o.status !== statusFilter) return false;
+      if (tokens.length === 0) return true;
+      const haystack = [
+        o.orderNumber,
+        ...(o.items || []).map((it: any) => it.productName || ""),
+      ].join(" ").toLowerCase();
+      return tokens.every((t: string) => haystack.includes(t));
+    });
+  }, [orders, query, statusFilter]);
+
+  return (
+    <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-8">
+      <motion.div variants={fadeUp}>
+        <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-[#DFBA73]/70 mb-2">Dashboard / Orders</p>
+        <h1 className="text-3xl font-light tracking-wide">{isSeller ? "Manage Orders" : "My Orders"}</h1>
+      </motion.div>
+
+      {orders.length ? (
+        <>
+          {/* Search + status filter */}
+          <motion.div variants={fadeUp} className="space-y-4 border-b border-white/[0.04] pb-5">
+            <div className="relative">
+              <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#52525B]" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by order number or product name…"
+                className="w-full rounded-full border border-white/[0.07] bg-[#0A0A0D] py-3 pl-10 pr-4 text-[12px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all focus:shadow-[0_0_14px_rgba(223,186,115,0.08)]"
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {ORDER_FILTERS.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setStatusFilter(s)}
+                  className={`rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all active:scale-95 ${statusFilter === s ? "border-[#DFBA73]/40 bg-[#DFBA73]/12 text-[#DFBA73]" : "border-white/[0.07] text-[#7C7C83] hover:text-[#FAF9F6] hover:border-white/20"}`}
+                >
+                  {ORDER_FILTER_LABEL[s]}
+                </button>
+              ))}
+            </div>
+          </motion.div>
+
+          <motion.p variants={fadeUp} className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">
+            {filtered.length} of {orders.length} orders
+          </motion.p>
+
+          {filtered.length ? (
+            <motion.div variants={stagger} className="space-y-2.5">
+              {filtered.map((o: any) => (
+                <motion.div variants={fadeUp} key={o.id}>
+                  <OrderRow order={o} isSeller={isSeller} />
+                </motion.div>
+              ))}
+            </motion.div>
+          ) : (
+            <motion.div variants={fadeUp} className="flex h-44 flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.06] bg-[#0E0E12]/30">
+              <p className="text-[13px] text-[#52525B] font-light">No orders match your filters.</p>
+            </motion.div>
+          )}
+        </>
+      ) : (
+        <motion.div variants={fadeUp} className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.05] bg-[#0E0E12]/30">
+          <ShoppingBag className="w-8 h-8 text-[#52525B] mb-3" />
+          <p className="text-[13px] text-[#7C7C83] font-light">
+            {isSeller ? "No orders have come in yet." : "You haven't placed any orders yet."}
+          </p>
+          {!isSeller && (
+            <Link href="/discover" className="mt-4 rounded-full bg-[#DFBA73] px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#08080a] transition-all hover:bg-[#EFDDBC] active:scale-95">
+              Start Shopping
+            </Link>
+          )}
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
 /* ─── BoardCard ────────────────────────────────────────────────────────── */
 function BoardCard({ board }: { board: any }) {
   const accentClass = BOARD_ACCENT[board.type] ?? BOARD_ACCENT.collection;
@@ -241,6 +340,9 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
 
   useEffect(() => { setGreeting(getGreeting()); }, []);
 
+  /* Reset scroll to top whenever the active tab changes (in-page nav) */
+  useEffect(() => { window.scrollTo({ top: 0, behavior: "auto" }); }, [activeTab]);
+
   const isSeller = user.role === "seller";
 
   const BUYER_TABS = [
@@ -268,7 +370,8 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
   const avatarInitial = (user.name || user.email || "?").charAt(0).toUpperCase();
 
   return (
-    <div className="flex min-h-screen w-full bg-[#08080a] text-[#FAF9F6] font-sans pt-24 pb-16 px-5 md:px-10">
+    <div className="dobaeni-page flex min-h-screen w-full bg-[#08080a] text-[#FAF9F6] font-sans pt-24 pb-16 px-5 md:px-10">
+      <CustomCursor />
 
       {/* Background ambient */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -564,34 +667,7 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
 
                 {/* ── Orders ───────────────────────────────────────── */}
                 {activeTab === "orders" && (
-                  <motion.div variants={stagger} initial="hidden" animate="show" className="space-y-8">
-                    <motion.div variants={fadeUp}>
-                      <p className="text-[10px] font-mono uppercase tracking-[0.35em] text-[#DFBA73]/70 mb-2">Dashboard / Orders</p>
-                      <h1 className="text-3xl font-light tracking-wide">{isSeller ? "Manage Orders" : "My Orders"}</h1>
-                    </motion.div>
-
-                    {orders.length ? (
-                      <motion.div variants={stagger} className="space-y-2.5">
-                        {orders.map((o: any) => (
-                          <motion.div variants={fadeUp} key={o.id}>
-                            <OrderRow order={o} isSeller={isSeller} />
-                          </motion.div>
-                        ))}
-                      </motion.div>
-                    ) : (
-                      <motion.div variants={fadeUp} className="flex h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-white/[0.05] bg-[#0E0E12]/30">
-                        <ShoppingBag className="w-8 h-8 text-[#52525B] mb-3" />
-                        <p className="text-[13px] text-[#7C7C83] font-light">
-                          {isSeller ? "No orders have come in yet." : "You haven't placed any orders yet."}
-                        </p>
-                        {!isSeller && (
-                          <Link href="/discover" className="mt-4 rounded-full bg-[#DFBA73] px-5 py-2 text-[11px] font-mono uppercase tracking-widest text-[#08080a] transition-all hover:bg-[#EFDDBC] active:scale-95">
-                            Start Shopping
-                          </Link>
-                        )}
-                      </motion.div>
-                    )}
-                  </motion.div>
+                  <OrdersTab orders={orders} isSeller={isSeller} />
                 )}
 
                 {/* ── Boards ───────────────────────────────────────── */}

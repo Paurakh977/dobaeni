@@ -1,18 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingBag, Megaphone, Plus, Loader2,
   Pencil, Trash2, X, Lock, Sparkles, Star, Users, ExternalLink,
-  Calendar, DollarSign, TrendingUp, Activity, Eye, BarChart3,
-  Zap, ArrowUpRight, CheckCircle2, Clock, Layers,
+  Calendar, DollarSign, TrendingUp, TrendingDown, Activity, Eye, BarChart3,
+  Zap, ArrowUpRight, CheckCircle2, Clock, Layers, Search, SlidersHorizontal,
+  ArrowUpDown, Truck, Filter,
 } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import ImageUpload from '@/app/components/ImageUpload';
-import { formatPrice, formatDate, formatNumber } from '@/lib/format';
-import type { SellerStats, SellerProductView, OrderView } from '@/lib/queries';
+import { AreaChart, BarChart, DonutChart, type Segment } from '@/app/components/charts/Charts';
+import { formatPrice, formatDate, formatNumber, AESTHETICS } from '@/lib/format';
+import type { SellerStats, SellerProductView, OrderView, SellerAnalytics } from '@/lib/queries';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 type Promotion = {
@@ -28,12 +30,27 @@ type Promotion = {
 /* ─── Tabs ───────────────────────────────────────────────────────────── */
 const TABS = [
   { id: 'overview',   label: 'Overview',   icon: LayoutDashboard },
+  { id: 'analytics',  label: 'Analytics',  icon: BarChart3 },
   { id: 'products',   label: 'Products',   icon: Package },
   { id: 'orders',     label: 'Orders',     icon: ShoppingBag },
   { id: 'promotions', label: 'Promotions', icon: Megaphone },
 ];
 
 const ORDER_STATUSES = ['pending', 'processing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
+
+/* ─── Status colors for the analytics donut ──────────────────────────── */
+const STATUS_HEX: Record<string, string> = {
+  pending: '#F59E0B',
+  processing: '#38BDF8',
+  packed: '#818CF8',
+  out_for_delivery: '#A78BFA',
+  delivered: '#34D399',
+  cancelled: '#F87171',
+  refunded: '#A1A1AA',
+};
+
+const COURIERS = ['Nepal Post', 'FastGo', 'KTM Courier', 'Sastodeal Express', 'BlueDart', 'Pathao', 'Aramex'];
+const prettyStatus = (s: string) => s.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
 /* ─── Status styles ──────────────────────────────────────────────────── */
 const STATUS_STYLE: Record<string, string> = {
@@ -153,9 +170,9 @@ function OrderFulfillmentTimeline({ status }: { status: string }) {
 
 /* ─── PremiumStatCard ────────────────────────────────────────────────── */
 function StatCard({
-  label, value, sub, icon: Icon, accent = false, trend,
+  label, value, sub, icon: Icon, accent = false, trend, trendUp = true,
 }: {
-  label: string; value: string; sub?: string; icon?: any; accent?: boolean; trend?: string;
+  label: string; value: string; sub?: string; icon?: any; accent?: boolean; trend?: string; trendUp?: boolean;
 }) {
   return (
     <motion.div
@@ -172,8 +189,8 @@ function StatCard({
           </div>
         )}
         {trend && (
-          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
-            <ArrowUpRight className="w-3 h-3" /> {trend}
+          <span className={`flex items-center gap-1 text-[10px] font-mono ${trendUp ? 'text-emerald-400' : 'text-red-400'}`}>
+            {trendUp ? <ArrowUpRight className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />} {trend}
           </span>
         )}
       </div>
@@ -189,7 +206,7 @@ function StatCard({
 
 /* ─── Main component ─────────────────────────────────────────────────── */
 export default function SellerDashboard({
-  orgName, analyticsLocked, suspended, stats, products, orders, promotions,
+  orgName, analyticsLocked, suspended, stats, products, orders, analytics, promotions,
 }: {
   orgName: string;
   analyticsLocked: boolean;
@@ -197,6 +214,7 @@ export default function SellerDashboard({
   stats: SellerStats;
   products: SellerProductView[];
   orders: OrderView[];
+  analytics: SellerAnalytics;
   promotions: Promotion[];
 }) {
   const [tab, setTab] = useState('overview');
@@ -313,7 +331,8 @@ export default function SellerDashboard({
           exit={{   opacity: 0, y: -16, filter: 'blur(5px)' }}
           transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
         >
-          {tab === 'overview'   && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} />}
+          {tab === 'overview'   && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} analytics={analytics} />}
+          {tab === 'analytics'  && <Analytics analyticsLocked={analyticsLocked} stats={stats} initial={analytics} />}
           {tab === 'products'   && <Products suspended={suspended} products={products} />}
           {tab === 'orders'     && <Orders   suspended={suspended} orders={orders} />}
           {tab === 'promotions' && <Promotions suspended={suspended} promotions={promotions} />}
@@ -324,9 +343,10 @@ export default function SellerDashboard({
 }
 
 /* ═══ Overview ═══════════════════════════════════════════════════════════ */
-function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean; stats: SellerStats; orders: OrderView[] }) {
+function Overview({ analyticsLocked, stats, orders, analytics }: { analyticsLocked: boolean; stats: SellerStats; orders: OrderView[]; analytics: SellerAnalytics }) {
   const totalUnits = orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
   const conversion = stats.views ? `${((stats.orders / stats.views) * 100).toFixed(1)}%` : '0%';
+  const revChange = analytics.totals.revenueChangePct;
 
   if (analyticsLocked) {
     return (
@@ -346,7 +366,7 @@ function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-10">
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Revenue"       value={formatPrice(stats.revenue)}           icon={DollarSign}  accent />
+        <StatCard label="Revenue"       value={formatPrice(stats.revenue)}           icon={DollarSign}  accent trend={revChange !== 0 ? `${revChange > 0 ? '+' : ''}${revChange.toFixed(0)}%` : undefined} trendUp={revChange >= 0} />
         <StatCard label="Orders"        value={formatNumber(stats.orders)}            icon={ShoppingBag} sub={`${stats.pendingOrders} pending`} />
         <StatCard label="Products"      value={formatNumber(stats.products)}          icon={Package} />
         <StatCard label="Followers"     value={formatNumber(stats.followers)}         icon={Users} />
@@ -355,6 +375,18 @@ function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean
         <StatCard label="Units Sold"    value={formatNumber(totalUnits)}              icon={Layers} />
         <StatCard label="Conversion"    value={conversion}                            icon={TrendingUp} />
       </div>
+
+      {/* Revenue trend chart (last 30 days) */}
+      <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.06] bg-[#0E0E12]/60 backdrop-blur-xl p-6">
+        <div className="mb-5 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5 text-[#DFBA73]/60" />
+            <h2 className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#8E8E93]">Revenue · Last 30 Days</h2>
+          </div>
+          <span className="text-[13px] font-light text-[#DFBA73] tabular-nums">{formatPrice(analytics.totals.revenue)}</span>
+        </div>
+        <AreaChart data={analytics.revenueSeries} height={200} format={(n) => formatPrice(n)} />
+      </motion.div>
 
       {/* Quick KPI strip */}
       <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -405,14 +437,251 @@ function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean
   );
 }
 
+/* ═══ Analytics ══════════════════════════════════════════════════════════ */
+const RANGES = [
+  { days: 7, label: '7D' },
+  { days: 30, label: '30D' },
+  { days: 90, label: '90D' },
+];
+
+function Analytics({ analyticsLocked, stats, initial }: { analyticsLocked: boolean; stats: SellerStats; initial: SellerAnalytics }) {
+  const [range, setRange] = useState(initial.range);
+  const [data, setData] = useState<SellerAnalytics>(initial);
+  const [loading, setLoading] = useState(false);
+
+  async function changeRange(days: number) {
+    if (days === range) return;
+    setRange(days);
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/seller/analytics?range=${days}`);
+      if (res.ok) {
+        const { analytics } = await res.json();
+        setData(analytics);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  if (analyticsLocked) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-amber-500/15 bg-amber-500/[0.02] py-24 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/15 mb-4">
+          <Lock size={22} className="text-amber-400/60" />
+        </div>
+        <p className="text-[15px] text-amber-200/80 font-light">Analytics are hidden</p>
+        <p className="mt-2 max-w-sm text-[13px] text-amber-200/40 leading-relaxed font-light">
+          A platform administrator has locked your brand's analytics. Contact support if you believe this is a mistake.
+        </p>
+      </div>
+    );
+  }
+
+  const t = data.totals;
+  const statusSegments: Segment[] = data.statusBreakdown.map((s) => ({
+    label: prettyStatus(s.status),
+    value: s.count,
+    color: STATUS_HEX[s.status] || '#A1A1AA',
+  }));
+  const totalStatusOrders = data.statusBreakdown.reduce((a, s) => a + s.count, 0);
+
+  return (
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
+      {/* Range selector */}
+      <motion.div variants={itemVariants} className="flex items-center justify-between border-b border-white/[0.04] pb-4">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-3.5 h-3.5 text-[#DFBA73]/60" />
+          <h2 className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#8E8E93]">Performance Analytics</h2>
+          {loading && <Loader2 size={12} className="animate-spin text-[#DFBA73]" />}
+        </div>
+        <div className="flex gap-1 rounded-full border border-white/[0.07] bg-white/[0.02] p-1">
+          {RANGES.map((r) => (
+            <button
+              key={r.days}
+              onClick={() => changeRange(r.days)}
+              className={`rounded-full px-3.5 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all ${range === r.days ? 'bg-[#DFBA73] text-[#08080a]' : 'text-[#7C7C83] hover:text-[#FAF9F6]'}`}
+            >
+              {r.label}
+            </button>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* KPI row */}
+      <motion.div variants={itemVariants} className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <AnalyticKpi label="Revenue" value={formatPrice(t.revenue)} trend={t.revenueChangePct} />
+        <AnalyticKpi label="Orders" value={formatNumber(t.orders)} />
+        <AnalyticKpi label="Units Sold" value={formatNumber(t.units)} />
+        <AnalyticKpi label="Avg Order Value" value={formatPrice(t.avgOrderValue)} />
+      </motion.div>
+
+      {/* Revenue + Orders area charts */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ChartCard title="Revenue Over Time" value={formatPrice(t.revenue)} icon={DollarSign}>
+          <AreaChart data={data.revenueSeries} height={210} format={(n) => formatPrice(n)} replayKey={range} />
+        </ChartCard>
+        <ChartCard title="Orders Over Time" value={formatNumber(t.orders)} icon={ShoppingBag}>
+          <AreaChart data={data.ordersSeries} height={210} format={(n) => `${n} orders`} color="#38BDF8" replayKey={range} />
+        </ChartCard>
+      </div>
+
+      {/* Views + Status breakdown */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ChartCard title="Product Views" value={formatNumber(t.views)} icon={Eye}>
+          <AreaChart data={data.viewsSeries} height={210} format={(n) => `${n} views`} color="#A78BFA" replayKey={range} />
+        </ChartCard>
+        <ChartCard title="Order Status Breakdown" icon={Activity}>
+          {statusSegments.length === 0 ? (
+            <EmptyChart label="No orders yet" />
+          ) : (
+            <div className="py-2">
+              <DonutChart data={statusSegments} centerLabel="Orders" centerValue={String(totalStatusOrders)} replayKey={range} />
+            </div>
+          )}
+        </ChartCard>
+      </div>
+
+      {/* Top products + Revenue by category */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ChartCard title="Top Products · Units Sold" icon={Layers}>
+          {data.topProducts.length === 0 ? (
+            <EmptyChart label="No sales yet" />
+          ) : (
+            <div className="pt-2">
+              <BarChart
+                horizontal
+                data={data.topProducts.map((p) => ({ label: p.name, value: p.units }))}
+                format={(n) => `${n} sold`}
+                replayKey={range}
+              />
+            </div>
+          )}
+        </ChartCard>
+        <ChartCard title="Revenue by Category" icon={BarChart3}>
+          {data.revenueByCategory.length === 0 ? (
+            <EmptyChart label="No revenue yet" />
+          ) : (
+            <div className="pt-2">
+              <BarChart
+                horizontal
+                data={data.revenueByCategory.map((c) => ({ label: c.name, value: Math.round(c.revenue) }))}
+                format={(n) => formatPrice(n)}
+                replayKey={range}
+              />
+            </div>
+          )}
+        </ChartCard>
+      </div>
+    </motion.div>
+  );
+}
+
+function AnalyticKpi({ label, value, trend }: { label: string; value: string; trend?: number }) {
+  return (
+    <div className="rounded-2xl border border-white/[0.06] bg-[#0E0E12]/60 backdrop-blur-xl p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">{label}</p>
+        {trend != null && trend !== 0 && (
+          <span className={`flex items-center gap-0.5 text-[9px] font-mono ${trend > 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {trend > 0 ? <ArrowUpRight className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
+            {Math.abs(trend).toFixed(0)}%
+          </span>
+        )}
+      </div>
+      <p className="mt-1.5 text-[20px] font-light text-[#FAF9F6] tabular-nums leading-none">{value}</p>
+    </div>
+  );
+}
+
+function ChartCard({ title, value, icon: Icon, children }: { title: string; value?: string; icon?: any; children: React.ReactNode }) {
+  return (
+    <motion.div variants={itemVariants} className="rounded-2xl border border-white/[0.06] bg-[#0E0E12]/60 backdrop-blur-xl p-6">
+      <div className="mb-5 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {Icon && <Icon className="w-3.5 h-3.5 text-[#DFBA73]/60" />}
+          <h3 className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#8E8E93]">{title}</h3>
+        </div>
+        {value && <span className="text-[13px] font-light text-[#DFBA73] tabular-nums">{value}</span>}
+      </div>
+      {children}
+    </motion.div>
+  );
+}
+
+function EmptyChart({ label }: { label: string }) {
+  return (
+    <div className="flex h-[200px] items-center justify-center rounded-xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20">
+      <p className="text-[12px] text-[#52525B] font-light">{label}</p>
+    </div>
+  );
+}
+
 /* ═══ Products ═══════════════════════════════════════════════════════════ */
+type ProductSort = 'newest' | 'oldest' | 'price_desc' | 'price_asc' | 'sold_desc';
+const PRODUCT_SORTS: { value: ProductSort; label: string }[] = [
+  { value: 'newest',    label: 'Newest' },
+  { value: 'oldest',    label: 'Oldest' },
+  { value: 'price_desc', label: 'Price ↓' },
+  { value: 'price_asc',  label: 'Price ↑' },
+  { value: 'sold_desc',  label: 'Best selling' },
+];
+
 function Products({ suspended, products }: { suspended: boolean; products: SellerProductView[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<SellerProductView | null>(null);
 
+  /* Filter / search / sort state */
+  const [query, setQuery]               = useState('');
+  const [category, setCategory]         = useState<string | null>(null);
+  const [aesthetic, setAesthetic]       = useState<string | null>(null);
+  const [status, setStatus]             = useState<'all' | 'live' | 'draft'>('all');
+  const [sort, setSort]                 = useState<ProductSort>('newest');
+
   function openCreate() { setEditing(null); setShowForm(true); }
   function openEdit(p: SellerProductView) { setEditing(p); setShowForm(true); }
+
+  /* Derive category options from data */
+  const categories = Array.from(new Set(products.map((p) => p.category).filter(Boolean))) as string[];
+
+  const filtered = useMemo(() => {
+    // Flexible, tokenized search across every meaningful field.
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const matchesQuery = (p: SellerProductView) => {
+      if (tokens.length === 0) return true;
+      const haystack = [
+        p.name,
+        p.category ?? '',
+        ...(p.styleKeywords || []),
+        p.gender ?? '',
+        p.material ?? '',
+      ].join(' ').toLowerCase();
+      // every typed token must appear somewhere (AND semantics)
+      return tokens.every((t) => haystack.includes(t));
+    };
+
+    let list = products.filter((p) => {
+      if (!matchesQuery(p)) return false;
+      if (category && p.category !== category) return false;
+      if (aesthetic && !(p.styleKeywords || []).includes(aesthetic)) return false;
+      if (status === 'live' && !p.isPublished) return false;
+      if (status === 'draft' && p.isPublished) return false;
+      return true;
+    });
+    list = [...list].sort((a, b) => {
+      switch (sort) {
+        case 'oldest':     return a.createdAt.localeCompare(b.createdAt);
+        case 'price_desc': return b.price - a.price;
+        case 'price_asc':  return a.price - b.price;
+        case 'sold_desc':  return b.soldCount - a.soldCount;
+        default:           return b.createdAt.localeCompare(a.createdAt);
+      }
+    });
+    return list;
+  }, [products, query, category, aesthetic, status, sort]);
+
+  const hasFilters = !!query || !!category || !!aesthetic || status !== 'all';
 
   if (showForm) {
     return <ProductForm product={editing} onClose={() => { setShowForm(false); router.refresh(); }} />;
@@ -420,85 +689,183 @@ function Products({ suspended, products }: { suspended: boolean; products: Selle
 
   return (
     <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
-      <motion.div variants={itemVariants} className="flex items-center justify-between border-b border-white/[0.04] pb-4">
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">{products.length} products in catalog</p>
+      {/* Header + controls */}
+      <motion.div variants={itemVariants} className="space-y-4 border-b border-white/[0.04] pb-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">
+              {filtered.length} of {products.length} products
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Sort */}
+            <div className="flex items-center gap-1 rounded-full border border-white/[0.07] bg-white/[0.02] p-1">
+              <ArrowUpDown size={11} className="ml-1.5 text-[#52525B]" />
+              {PRODUCT_SORTS.map((s) => (
+                <button
+                  key={s.value}
+                  onClick={() => setSort(s.value)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider transition-all ${sort === s.value ? 'bg-[#DFBA73]/15 text-[#DFBA73]' : 'text-[#7C7C83] hover:text-[#FAF9F6]'}`}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+            {!suspended && (
+              <button
+                onClick={openCreate}
+                data-cursor="hover"
+                className="flex items-center gap-2 rounded-full bg-[#DFBA73] px-5 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.25)] active:scale-95"
+              >
+                <Plus size={13} /> Add product
+              </button>
+            )}
+          </div>
         </div>
-        {!suspended && (
-          <button
-            onClick={openCreate}
-            data-cursor="hover"
-            className="flex items-center gap-2 rounded-full bg-[#DFBA73] px-5 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.25)] active:scale-95"
-          >
-            <Plus size={13} /> Add product
-          </button>
-        )}
+
+        {/* Search */}
+        <div className="relative">
+          <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#52525B]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by name or category…"
+            className="w-full rounded-full border border-white/[0.07] bg-[#0A0A0D] py-3 pl-10 pr-4 text-[12px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all focus:shadow-[0_0_14px_rgba(223,186,115,0.08)]"
+          />
+        </div>
+
+        {/* Filter chips */}
+        <div className="flex flex-wrap items-center gap-2">
+          {(['all', 'live', 'draft'] as const).map((s) => (
+            <FilterChip key={s} active={status === s} label={s === 'all' ? 'All' : s === 'live' ? 'Live' : 'Draft'} onClick={() => setStatus(s)} />
+          ))}
+          {categories.map((c) => (
+            <FilterChip key={c} active={category === c} label={c} onClick={() => setCategory(category === c ? null : c)} />
+          ))}
+          {aesthetic && <FilterChip active label={aesthetic} onClick={() => setAesthetic(null)} onRemove={() => setAesthetic(null)} />}
+          {!aesthetic && (
+            <div className="relative">
+              <select
+                value=""
+                onChange={(e) => { if (e.target.value) setAesthetic(e.target.value); }}
+                className="appearance-none rounded-full border border-dashed border-white/[0.08] bg-white/[0.02] py-1.5 pl-3 pr-7 text-[10px] font-mono uppercase tracking-wider text-[#7C7C83] outline-none hover:text-[#FAF9F6] hover:border-[#DFBA73]/30 transition-all cursor-pointer"
+              >
+                <option value="" className="bg-[#0E0E12]">+ Aesthetic</option>
+                {AESTHETICS.map((a) => (
+                  <option key={a} value={a} className="bg-[#0E0E12]">{a}</option>
+                ))}
+              </select>
+              <SlidersHorizontal size={10} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[#52525B]" />
+            </div>
+          )}
+          {hasFilters && (
+            <button
+              onClick={() => { setQuery(''); setCategory(null); setAesthetic(null); setStatus('all'); }}
+              className="flex items-center gap-1 rounded-full border border-white/[0.07] px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider text-[#52525B] transition-all hover:text-[#FAF9F6] hover:border-white/20 active:scale-95"
+            >
+              <X size={10} /> Clear
+            </button>
+          )}
+        </div>
       </motion.div>
 
-      {products.length === 0 ? (
+      {filtered.length === 0 ? (
         <motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24 text-center">
           <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.02] border border-white/[0.04] mb-4">
             <Package size={24} className="text-[#52525B]" />
           </div>
-          <p className="text-[14px] text-[#8E8E93] font-light max-w-xs leading-relaxed">No products yet. List your first piece into the catalog.</p>
+          <p className="text-[14px] text-[#8E8E93] font-light max-w-xs leading-relaxed">
+            {products.length === 0 ? 'No products yet. List your first piece into the catalog.' : 'No products match your filters.'}
+          </p>
         </motion.div>
       ) : (
         <motion.div variants={itemVariants} className="space-y-3">
-          {products.map((p) => (
-            <div
-              key={p.id}
-              className="group flex items-center gap-4 rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-4 transition-all duration-300 hover:border-[#DFBA73]/20 hover:bg-[#0E0E12]/80 hover:shadow-[0_0_20px_rgba(223,186,115,0.04)]"
-            >
-              {/* Product image */}
-              <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-xl bg-[#0A0A0D] border border-white/[0.04]">
-                <SafeImage
-                  src={p.image}
-                  alt={p.name}
-                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
-                />
-              </div>
-
-              {/* Details */}
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-light text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73] duration-300">
-                  {p.name}
-                </p>
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-[#52525B]">
-                  <span className="text-[#DFBA73] font-light">{formatPrice(p.price, p.currency)}</span>
-                  <span className="text-white/10">·</span>
-                  <span className={p.stock <= 5 ? "text-amber-400 font-medium" : ""}>{p.stock} in stock</span>
-                  <span className="text-white/10">·</span>
-                  <span>{p.soldCount} sold</span>
+          <AnimatePresence mode="popLayout">
+            {filtered.map((p) => (
+              <motion.div
+                key={p.id}
+                layout
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.97 }}
+                transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] as const }}
+                className="group flex items-center gap-4 rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-4 transition-all duration-300 hover:border-[#DFBA73]/20 hover:bg-[#0E0E12]/80 hover:shadow-[0_0_20px_rgba(223,186,115,0.04)]"
+              >
+                {/* Product image */}
+                <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-xl bg-[#0A0A0D] border border-white/[0.04]">
+                  <SafeImage
+                    src={p.image}
+                    alt={p.name}
+                    className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                  />
                 </div>
-              </div>
 
-              {/* Status badge */}
-              <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-wider font-mono ${p.isPublished ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'}`}>
-                {p.isPublished ? (
-                  <><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</>
-                ) : (
-                  <><span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />Draft</>
-                )}
-              </span>
+                {/* Details */}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[14px] font-light text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73] duration-300">
+                    {p.name}
+                  </p>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-[#52525B]">
+                    <span className="text-[#DFBA73] font-light">{formatPrice(p.price, p.currency)}</span>
+                    <span className="text-white/10">·</span>
+                    <span className={p.stock <= 5 ? "text-amber-400 font-medium" : ""}>{p.stock} in stock</span>
+                    <span className="text-white/10">·</span>
+                    <span>{p.soldCount} sold</span>
+                    {p.category && (<><span className="text-white/10">·</span><span>{p.category}</span></>)}
+                  </div>
+                </div>
 
-              {/* Actions */}
-              <div className="flex items-center gap-1 shrink-0">
-                <button
-                  onClick={() => openEdit(p)}
-                  disabled={suspended}
-                  data-cursor="hover"
-                  className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-[#DFBA73] disabled:opacity-30 disabled:pointer-events-none active:scale-90"
-                  aria-label="Edit"
-                >
-                  <Pencil size={13} />
-                </button>
-                <DeleteProduct id={p.id} disabled={suspended} onDone={() => router.refresh()} />
-              </div>
-            </div>
-          ))}
+                {/* Status badge */}
+                <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-wider font-mono ${p.isPublished ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'}`}>
+                  {p.isPublished ? (
+                    <><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</>
+                  ) : (
+                    <><span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />Draft</>
+                  )}
+                </span>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEdit(p)}
+                    disabled={suspended}
+                    data-cursor="hover"
+                    className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-[#DFBA73] disabled:opacity-30 disabled:pointer-events-none active:scale-90"
+                    aria-label="Edit"
+                  >
+                    <Pencil size={13} />
+                  </button>
+                  <DeleteProduct id={p.id} disabled={suspended} onDone={() => router.refresh()} />
+                </div>
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </motion.div>
       )}
     </motion.div>
+  );
+}
+
+/* ─── FilterChip ────────────────────────────────────────────────────── */
+function FilterChip({ active, label, onClick, onRemove }: { active: boolean; label: string; onClick: () => void; onRemove?: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      data-cursor="hover"
+      className={`group flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] font-mono uppercase tracking-wider transition-all active:scale-95 ${active ? 'border-[#DFBA73]/40 bg-[#DFBA73]/12 text-[#DFBA73]' : 'border-white/[0.07] text-[#7C7C83] hover:text-[#FAF9F6] hover:border-white/20'}`}
+    >
+      {label}
+      {active && onRemove && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => { e.stopPropagation(); onRemove(); }}
+          className="ml-0.5 -mr-1 rounded-full p-0.5 text-[#DFBA73]/60 hover:text-[#DFBA73] hover:bg-white/10"
+        >
+          <X size={9} />
+        </span>
+      )}
+    </button>
   );
 }
 
@@ -679,6 +1046,9 @@ function ProductForm({ product, onClose }: { product: SellerProductView | null; 
 function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[] }) {
   const [list, setList] = useState(orders);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [query, setQuery]               = useState('');
+  const [trackingFor, setTrackingFor]   = useState<string | null>(null);
 
   async function update(id: string, status: string, tracking?: string, courier?: string) {
     setBusyId(id);
@@ -695,6 +1065,21 @@ function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[]
     } finally { setBusyId(null); }
   }
 
+  const filtered = useMemo(() => {
+    // Flexible, tokenized search across order number AND product names.
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return list.filter((o) => {
+      if (statusFilter && o.status !== statusFilter) return false;
+      if (tokens.length === 0) return true;
+      const haystack = [
+        o.orderNumber,
+        ...o.items.map((it) => it.productName || ""),
+      ].join(" ").toLowerCase();
+      // every typed token must appear somewhere (AND semantics)
+      return tokens.every((t) => haystack.includes(t));
+    });
+  }, [list, statusFilter, query]);
+
   if (list.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24">
@@ -706,62 +1091,178 @@ function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[]
     );
   }
 
+  const inputCls = 'w-full rounded-xl border border-white/[0.07] bg-[#0A0A0D] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all';
+
   return (
-    <div className="space-y-4">
-      {list.map((o) => (
-        <div key={o.id} className="group rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-5 transition-all duration-300 hover:border-white/10">
-          {/* Order header */}
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="font-mono text-[13px] font-medium text-[#FAF9F6]">{o.orderNumber}</p>
-              <p className="mt-1 text-[11px] text-[#52525B]">
-                {formatDate(o.createdAt)} · <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {busyId === o.id && <Loader2 size={13} className="animate-spin text-[#DFBA73]" />}
-              <select
-                value={o.status}
-                disabled={busyId === o.id || suspended}
-                onChange={(e) => update(o.id, e.target.value)}
-                className="rounded-xl border border-white/[0.07] bg-[#0A0A0D] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
-              >
-                {ORDER_STATUSES.map((s) => (
-                  <option key={s} value={s} className="bg-[#0E0E12]">{s.replace(/_/g, ' ')}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Order items */}
-          <div className="mt-4 space-y-3 border-t border-white/[0.04] pt-4">
-            {o.items.map((it) => (
-              <div key={it.id} className="flex items-center gap-3">
-                <div className="h-12 w-10 shrink-0 overflow-hidden rounded-lg border border-white/[0.04] bg-[#0A0A0D]">
-                  <SafeImage src={it.productImage} alt="" className="h-full w-full object-cover" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <span className="block truncate text-[13px] font-light text-[#FAF9F6]">{it.productName}</span>
-                  <span className="block text-[10px] text-[#52525B] mt-0.5 font-mono">
-                    {it.size ? `Size: ${it.size}` : ''}{it.color ? ` · Color: ${it.color}` : ''}
-                  </span>
-                </div>
-                <span className="text-[12px] text-[#52525B]">×{it.quantity}</span>
-              </div>
-            ))}
-          </div>
-
-          <OrderFulfillmentTimeline status={o.status} />
-
-          {o.trackingNumber && (
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-white/[0.015] border border-white/[0.04] px-3.5 py-2.5 text-[11px] text-[#52525B]">
-              <span>Carrier: <strong className="text-[#FAF9F6] font-mono ml-1">{o.courierName || 'Standard'}</strong></span>
-              <span>Tracking: <strong className="text-[#DFBA73] font-mono ml-1">{o.trackingNumber}</strong></span>
-            </div>
-          )}
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-5">
+      {/* Search + status filter chips */}
+      <motion.div variants={itemVariants} className="space-y-4 border-b border-white/[0.04] pb-5">
+        <div className="relative">
+          <Search size={13} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#52525B]" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by order number or product name…"
+            className="w-full rounded-full border border-white/[0.07] bg-[#0A0A0D] py-3 pl-10 pr-4 text-[12px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all focus:shadow-[0_0_14px_rgba(223,186,115,0.08)]"
+          />
         </div>
-      ))}
-    </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <FilterChip active={statusFilter === null} label="All" onClick={() => setStatusFilter(null)} />
+          {ORDER_STATUSES.map((s) => (
+            <FilterChip key={s} active={statusFilter === s} label={prettyStatus(s)} onClick={() => setStatusFilter(statusFilter === s ? null : s)} />
+          ))}
+        </div>
+      </motion.div>
+
+      <motion.p variants={itemVariants} className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">
+        {filtered.length} of {list.length} orders
+      </motion.p>
+
+      {filtered.length === 0 ? (
+        <motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24 text-center">
+          <p className="text-[14px] text-[#8E8E93] font-light">No orders match your filters.</p>
+        </motion.div>
+      ) : (
+        <motion.div variants={itemVariants} className="space-y-4">
+          <AnimatePresence mode="popLayout">
+            {filtered.map((o) => {
+              const isTrackingOpen = trackingFor === o.id;
+              return (
+                <motion.div
+                  key={o.id}
+                  layout
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.97 }}
+                  transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] as const }}
+                  className="group rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-5 transition-all duration-300 hover:border-white/10"
+                >
+                  {/* Order header */}
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <div>
+                      <p className="font-mono text-[13px] font-medium text-[#FAF9F6]">{o.orderNumber}</p>
+                      <p className="mt-1 text-[11px] text-[#52525B]">
+                        {formatDate(o.createdAt)} · <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={o.status} />
+                      {busyId === o.id && <Loader2 size={13} className="animate-spin text-[#DFBA73]" />}
+                    </div>
+                  </div>
+
+                  {/* Order items */}
+                  <div className="mt-4 space-y-3 border-t border-white/[0.04] pt-4">
+                    {o.items.map((it) => (
+                      <div key={it.id} className="flex items-center gap-3">
+                        <div className="h-12 w-10 shrink-0 overflow-hidden rounded-lg border border-white/[0.04] bg-[#0A0A0D]">
+                          <SafeImage src={it.productImage} alt="" className="h-full w-full object-cover" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="block truncate text-[13px] font-light text-[#FAF9F6]">{it.productName}</span>
+                          <span className="block text-[10px] text-[#52525B] mt-0.5 font-mono">
+                            {it.size ? `Size: ${it.size}` : ''}{it.color ? ` · Color: ${it.color}` : ''}
+                          </span>
+                        </div>
+                        <span className="text-[12px] text-[#52525B]">×{it.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <OrderFulfillmentTimeline status={o.status} />
+
+                  {/* Tracking summary / entry */}
+                  {o.trackingNumber ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-white/[0.015] border border-white/[0.04] px-3.5 py-2.5 text-[11px] text-[#52525B]">
+                      <span>Carrier: <strong className="text-[#FAF9F6] font-mono ml-1">{o.courierName || 'Standard'}</strong></span>
+                      <span>Tracking: <strong className="text-[#DFBA73] font-mono ml-1">{o.trackingNumber}</strong></span>
+                    </div>
+                  ) : (
+                    !suspended && (
+                      <button
+                        onClick={() => setTrackingFor(isTrackingOpen ? null : o.id)}
+                        className="mt-4 flex items-center gap-2 rounded-xl border border-dashed border-white/[0.1] px-3.5 py-2.5 text-[11px] font-mono uppercase tracking-wider text-[#7C7C83] transition-all hover:border-[#DFBA73]/30 hover:text-[#DFBA73] active:scale-95"
+                      >
+                        <Truck size={12} /> Add tracking
+                      </button>
+                    )
+                  )}
+
+                  {isTrackingOpen && (
+                    <TrackingForm
+                      order={o}
+                      disabled={suspended}
+                      busy={busyId === o.id}
+                      onCancel={() => setTrackingFor(null)}
+                      onSubmit={async (courier, trackingNumber, status) => {
+                        await update(o.id, status, trackingNumber, courier);
+                        setTrackingFor(null);
+                      }}
+                    />
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </motion.div>
+      )}
+    </motion.div>
+  );
+}
+
+/* ─── TrackingForm ──────────────────────────────────────────────────── */
+function TrackingForm({
+  order, disabled, busy, onCancel, onSubmit,
+}: {
+  order: OrderView;
+  disabled: boolean;
+  busy: boolean;
+  onCancel: () => void;
+  onSubmit: (courier: string, tracking: string, status: string) => void;
+}) {
+  const [courier, setCourier]       = useState(order.courierName || COURIERS[0]);
+  const [tracking, setTracking]     = useState('');
+  const [status, setStatus]         = useState(order.status === 'pending' ? 'processing' : order.status);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, height: 0 }}
+      animate={{ opacity: 1, height: 'auto' }}
+      exit={{ opacity: 0, height: 0 }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] as const }}
+      className="mt-4 overflow-hidden rounded-2xl border border-white/[0.07] bg-[#0A0A0D] p-4"
+    >
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1.5 block text-[9px] font-mono uppercase tracking-widest text-[#6B6B72]">Carrier</label>
+          <select value={courier} onChange={(e) => setCourier(e.target.value)} disabled={disabled} className="w-full rounded-xl border border-white/[0.07] bg-[#0E0E12] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 cursor-pointer disabled:opacity-40">
+            {COURIERS.map((c) => <option key={c} value={c} className="bg-[#0E0E12]">{c}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="mb-1.5 block text-[9px] font-mono uppercase tracking-widest text-[#6B6B72]">Tracking Number</label>
+          <input value={tracking} onChange={(e) => setTracking(e.target.value)} disabled={disabled} placeholder="e.g. NP-8842319" className="w-full rounded-xl border border-white/[0.07] bg-[#0E0E12] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 disabled:opacity-40" />
+        </div>
+      </div>
+      <div className="mt-3">
+        <label className="mb-1.5 block text-[9px] font-mono uppercase tracking-widest text-[#6B6B72]">Update Status To</label>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} disabled={disabled} className="w-full rounded-xl border border-white/[0.07] bg-[#0E0E12] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 cursor-pointer disabled:opacity-40">
+          {ORDER_STATUSES.map((s) => <option key={s} value={s} className="bg-[#0E0E12]">{s.replace(/_/g, ' ')}</option>)}
+        </select>
+      </div>
+      <div className="mt-4 flex justify-end gap-3">
+        <button onClick={onCancel} className="rounded-full border border-white/[0.07] px-5 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#52525B] transition-all hover:text-[#FAF9F6] hover:border-white/20 active:scale-95">
+          Cancel
+        </button>
+        <button
+          onClick={() => tracking.trim() && onSubmit(courier, tracking.trim(), status)}
+          disabled={busy || disabled || !tracking.trim()}
+          className="flex items-center justify-center gap-2 rounded-full bg-[#DFBA73] px-6 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.3)] disabled:opacity-40 active:scale-95"
+        >
+          {busy && <Loader2 size={12} className="animate-spin" />} Save tracking
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
