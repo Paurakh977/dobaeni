@@ -1,6 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
-import { twoFactor, username, organization } from 'better-auth/plugins';
+import { twoFactor, username, organization, admin } from 'better-auth/plugins';
 import { nextCookies } from 'better-auth/next-js';
 import { db } from '@/lib/db';
 import { sendEmail } from '@/lib/email';
@@ -161,6 +161,9 @@ export const auth = betterAuth({
       enabled: true,
     },
     additionalFields: {
+      // Global platform role. Also read by the `admin()` plugin for access
+      // control (adminRoles = admin | moderator). `additionalFields` are merged
+      // after plugin schemas, so input stays true and sign-up may set it.
       role: {
         type: 'string',
         required: false,
@@ -198,6 +201,20 @@ export const auth = betterAuth({
     username({
       minUsernameLength: 3,
       maxUsernameLength: 30,
+    }),
+
+    // ── Platform admin / RBAC ──────────────────────────────────────────────
+    // `role` (declared in user.additionalFields below) doubles as the global
+    // platform role (buyer | seller | moderator | admin). `banned` / `banReason`
+    // / `banExpires` are added by this plugin and enforced by its session hook
+    // (banned users cannot sign in and their sessions are rejected). `role`
+    // stays user-settable via additionalFields so the sign-up form can still
+    // pick buyer vs seller.
+    admin({
+      defaultRole: 'buyer',
+      adminRoles: ['admin'],
+      bannedUserMessage:
+        'Your account has been suspended by the Dobaeni team. Contact support if you believe this is an error.',
     }),
 
     organization({

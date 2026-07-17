@@ -69,7 +69,12 @@ export type DiscoverFilters = {
 };
 
 export async function getDiscoverProducts(filters: DiscoverFilters = {}, userId?: string): Promise<ProductCardData[]> {
-  const where: any = { isPublished: true, isActive: true, stock: { gt: 0 } };
+  const where: any = {
+    isPublished: true,
+    isActive: true,
+    stock: { gt: 0 },
+    organization: { isPublished: true, status: { not: 'suspended' } },
+  };
 
   if (filters.search) {
     where.OR = [
@@ -301,7 +306,7 @@ export function brandScore(b: {
 
 export async function getBrands(): Promise<BrandSummary[]> {
   const orgs = await db.organization.findMany({
-    where: { isPublished: true, members: { some: {} } },
+    where: { isPublished: true, status: { not: 'suspended' }, members: { some: {} } },
     orderBy: [{ followerCount: 'desc' }, { createdAt: 'desc' }],
     take: 200,
     include: {
@@ -346,7 +351,7 @@ export type BrandRankings = {
 // least one approved review.
 export async function getBrandRankings(limit = 12): Promise<BrandRankings> {
   const orgs = await db.organization.findMany({
-    where: { isPublished: true, members: { some: {} } },
+    where: { isPublished: true, status: { not: 'suspended' }, members: { some: {} } },
     orderBy: [{ followerCount: 'desc' }],
     take: 120,
     include: { _count: { select: { products: { where: { isPublished: true } } } } },
@@ -643,14 +648,20 @@ export async function getSellerOrders(orgId: string): Promise<OrderView[]> {
 // SELLER HELPERS
 // ===========================================================================
 
-export async function getSellerOrg(userId: string): Promise<{ id: string; name: string; slug: string | null } | null> {
+export async function getSellerOrg(userId: string): Promise<{ id: string; name: string; slug: string | null; analyticsLocked: boolean; status: string | null } | null> {
   const member = await db.member.findFirst({
     where: { userId, role: { in: ['owner', 'admin', 'member'] } },
     orderBy: { createdAt: 'desc' },
-    include: { organization: { select: { id: true, name: true, slug: true } } },
+    include: { organization: { select: { id: true, name: true, slug: true, analyticsLocked: true, status: true } } },
   });
   if (!member) return null;
-  return { id: member.organization.id, name: member.organization.name, slug: member.organization.slug };
+  return {
+    id: member.organization.id,
+    name: member.organization.name,
+    slug: member.organization.slug,
+    analyticsLocked: member.organization.analyticsLocked ?? false,
+    status: member.organization.status,
+  };
 }
 
 export type SellerProductView = {
