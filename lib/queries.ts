@@ -699,6 +699,11 @@ export type SellerProductView = {
   ratingAvg: number;
   ratingCount: number;
   orderCount: number;
+  createdAt: string;
+  category: string | null;
+  styleKeywords: string[];
+  gender: string | null;
+  material: string | null;
 };
 
 export async function getSellerProducts(orgId: string): Promise<SellerProductView[]> {
@@ -707,9 +712,14 @@ export async function getSellerProducts(orgId: string): Promise<SellerProductVie
     orderBy: { createdAt: 'desc' },
     include: {
       images: { orderBy: { position: 'asc' }, take: 1 },
+      category: { select: { name: true } },
       _count: { select: { orderItems: true } },
     },
   });
+  const parseArr = (s: string | null): string[] => {
+    if (!s) return [];
+    try { const a = JSON.parse(s); return Array.isArray(a) ? a.map(String) : []; } catch { return []; }
+  };
   return products.map((p: any) => ({
     id: p.id,
     name: p.name,
@@ -724,6 +734,11 @@ export async function getSellerProducts(orgId: string): Promise<SellerProductVie
     ratingAvg: p.ratingAvg || 0,
     ratingCount: p.ratingCount || 0,
     orderCount: p._count.orderItems,
+    createdAt: p.createdAt.toISOString(),
+    category: p.category?.name ?? null,
+    styleKeywords: parseArr(p.styleKeywords),
+    gender: p.gender ?? null,
+    material: p.material ?? null,
   }));
 }
 
@@ -770,6 +785,174 @@ export async function getSellerStats(orgId: string): Promise<SellerStats> {
     followers: org?.followerCount || 0,
     views: org?.viewCount || 0,
     avgRating: ratingAgg._avg.ratingAvg || 0,
+  };
+}
+
+// ===========================================================================
+// SELLER ANALYTICS (time-series for charts)
+// ===========================================================================
+
+export type SeriesPoint = { label: string; value: number };
+
+export type SellerAnalytics = {
+  range: number; // days covered
+  revenueSeries: SeriesPoint[];   // revenue per bucket
+  ordersSeries: SeriesPoint[];    // order count per bucket
+  viewsSeries: SeriesPoint[];     // product views per bucket
+  statusBreakdown: { status: string; count: number }[];
+  topProducts: { name: string; units: number; revenue: number }[];
+  revenueByCategory: { name: string; revenue: number }[];
+  totals: {
+    revenue: number;
+    orders: number;
+    units: number;
+    views: number;
+    avgOrderValue: number;
+    prevRevenue: number;       // previous equal-length window
+    revenueChangePct: number;  // % change vs previous window
+  };
+};
+
+// Bucket a date range into N labeled buckets (daily if <=31 days, else weekly).
+function makeBuckets(days: number): { start: Date; end: Date; label: string }[] {
+  const now = new Date();
+  const buckets: { start: Date; end: Date; label: string }[] = [];
+  const daily = days <= 31;
+  const step = daily ? 1 : 7;
+  const count = Math.ceil(days / step);
+  for (let i = count - 1; i >= 0; i--) {
+    const end = new Date(now);
+    end.setDate(now.getDate() - i * step);
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setDate(end.getDate() - (step - 1));
+    start.setHours(0, 0, 0, 0);
+    const label = daily
+      ? start.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })
+      : start.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+    buckets.push({ start, end, label });
+  }
+  return buckets;
+}
+
+export async function getSellerAnalytics(orgId: string, days = 30): Promise<SellerAnalytics> {
+  const now = new Date();
+  const rangeStart = new Date(now);
+  rangeStart.setDate(now.getDate() - days);
+  rangeStart.setHours(0, 0, 0, 0);
+
+  const prevStart = new Date(rangeStart);
+  prevStart.setDate(rangeStart.getDate() - days);
+
+  const buckets = makeBuckets(days);
+
+  const [orders, statusGroups, prevAgg, productViews, productIds] = await Promise.all([
+    db.order.findMany({
+      where: { organizationId: orgId, createdAt: { gte: rangeStart }, status: { notIn: ['cancelled', 'refunded'] } },
+      select: {
+        createdAt: true,
+        totalAmount: true,
+        items: { select: { quantity: true, price: true, productName: true, productId: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+    }),
+    db.order.groupBy({
+      by: ['status'],
+      where: { organizationId: orgId },
+      _count: { _all: true },
+    }),
+    db.order.aggregate({
+      where: { organizationId: orgId, createdAt: { gte: prevStart, lt: rangeStart }, status: { notIn: ['cancelled', 'refunded'] } },
+      _sum: { totalAmount: true },
+    }),
+    db.product.findMany({ where: { organizationId: orgId }, select: { id: true } }),
+    db.product.findMany({ where: { organizationId: orgId }, select: { id: true, categoryId: true, category: { select: { name: true } } } }),
+  ]);
+
+  const viewRows = await db.productView.findMany({
+    where: { productId: { in: productViews.map((p) => p.id) }, createdAt: { gte: rangeStart } },
+    select: { createdAt: true },
+  });
+
+  // ── time-series buckets ──
+  const revenueSeries: SeriesPoint[] = buckets.map((b) => ({ label: b.label, value: 0 }));
+  const ordersSeries: SeriesPoint[] = buckets.map((b) => ({ label: b.label, value: 0 }));
+  const viewsSeries: SeriesPoint[] = buckets.map((b) => ({ label: b.label, value: 0 }));
+
+  const bucketIndex = (d: Date): number => {
+    for (let i = 0; i < buckets.length; i++) {
+      if (d >= buckets[i].start && d <= buckets[i].end) return i;
+    }
+    return -1;
+  };
+
+  let totalRevenue = 0;
+  let totalUnits = 0;
+  const productAgg = new Map<string, { name: string; units: number; revenue: number }>();
+  const categoryAgg = new Map<string, number>();
+  const catByProduct = new Map(productIds.map((p) => [p.id, p.category?.name ?? 'Uncategorized']));
+
+  for (const o of orders) {
+    const idx = bucketIndex(o.createdAt);
+    if (idx >= 0) {
+      revenueSeries[idx].value += o.totalAmount;
+      ordersSeries[idx].value += 1;
+    }
+    totalRevenue += o.totalAmount;
+    for (const it of o.items) {
+      totalUnits += it.quantity;
+      const key = it.productId;
+      const line = it.price * it.quantity;
+      const cur = productAgg.get(key) ?? { name: it.productName || 'Product', units: 0, revenue: 0 };
+      cur.units += it.quantity;
+      cur.revenue += line;
+      productAgg.set(key, cur);
+      const catName = catByProduct.get(it.productId) ?? 'Uncategorized';
+      categoryAgg.set(catName, (categoryAgg.get(catName) ?? 0) + line);
+    }
+  }
+
+  for (const v of viewRows) {
+    const idx = bucketIndex(v.createdAt);
+    if (idx >= 0) viewsSeries[idx].value += 1;
+  }
+
+  const topProducts = [...productAgg.values()]
+    .sort((a, b) => b.units - a.units)
+    .slice(0, 6);
+
+  const revenueByCategory = [...categoryAgg.entries()]
+    .map(([name, revenue]) => ({ name, revenue }))
+    .sort((a, b) => b.revenue - a.revenue)
+    .slice(0, 6);
+
+  const statusBreakdown = statusGroups
+    .map((g) => ({ status: g.status, count: g._count._all }))
+    .sort((a, b) => b.count - a.count);
+
+  const totalOrders = orders.length;
+  const prevRevenue = prevAgg._sum.totalAmount ?? 0;
+  const revenueChangePct = prevRevenue > 0
+    ? ((totalRevenue - prevRevenue) / prevRevenue) * 100
+    : totalRevenue > 0 ? 100 : 0;
+
+  return {
+    range: days,
+    revenueSeries,
+    ordersSeries,
+    viewsSeries,
+    statusBreakdown,
+    topProducts,
+    revenueByCategory,
+    totals: {
+      revenue: totalRevenue,
+      orders: totalOrders,
+      units: totalUnits,
+      views: viewRows.length,
+      avgOrderValue: totalOrders ? totalRevenue / totalOrders : 0,
+      prevRevenue,
+      revenueChangePct,
+    },
   };
 }
 
