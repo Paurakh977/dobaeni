@@ -41,9 +41,14 @@ model User {
   displayUsername String?
 
   // custom auth fields (declared in lib/auth.ts -> user.additionalFields)
-  role                String?  @default("buyer") // buyer | seller
+  role                String?  @default("buyer") // buyer | seller | moderator | admin
   interests           String? // JSON array of selected aesthetics
   onboardingCompleted Boolean? @default(false)
+
+  // ── RBAC / moderation (Better Auth admin plugin) ──
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
 
   // relations
   sessions      Session[]
@@ -172,6 +177,9 @@ model Organization {
   shippingPolicy     String?
   returnPolicy       String?
   tier               String?  @default("none") // none | silver | gold | platinum (trust badge)
+
+  // ── Admin-controlled flags ──
+  analyticsLocked    Boolean? @default(false) // admin can lock a brand's analytics page
 
   // ── Denormalized metrics (updated via Prisma, NOT auth) ──
   ratingAvg     Float? @default(0)
