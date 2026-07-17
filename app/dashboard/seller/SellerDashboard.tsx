@@ -5,13 +5,16 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingBag, Megaphone, Plus, Loader2,
-  Pencil, Trash2, X, Check, Eye, EyeOff, Lock,
+  Pencil, Trash2, X, Lock, Sparkles, Star, Users, ExternalLink,
+  Calendar, DollarSign, TrendingUp, Activity, Eye, BarChart3,
+  Zap, ArrowUpRight, CheckCircle2, Clock, Layers,
 } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import ImageUpload from '@/app/components/ImageUpload';
 import { formatPrice, formatDate, formatNumber } from '@/lib/format';
 import type { SellerStats, SellerProductView, OrderView } from '@/lib/queries';
 
+/* ─── Types ──────────────────────────────────────────────────────────── */
 type Promotion = {
   id: string;
   title: string;
@@ -22,23 +25,171 @@ type Promotion = {
   endDate: string | null;
 };
 
+/* ─── Tabs ───────────────────────────────────────────────────────────── */
 const TABS = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboard },
-  { id: 'products', label: 'Products', icon: Package },
-  { id: 'orders', label: 'Orders', icon: ShoppingBag },
+  { id: 'overview',   label: 'Overview',   icon: LayoutDashboard },
+  { id: 'products',   label: 'Products',   icon: Package },
+  { id: 'orders',     label: 'Orders',     icon: ShoppingBag },
   { id: 'promotions', label: 'Promotions', icon: Megaphone },
 ];
 
 const ORDER_STATUSES = ['pending', 'processing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
 
+/* ─── Status styles ──────────────────────────────────────────────────── */
+const STATUS_STYLE: Record<string, string> = {
+  pending:          "bg-amber-500/10 text-amber-300 border-amber-500/20",
+  processing:       "bg-sky-500/10 text-sky-300 border-sky-500/20",
+  packed:           "bg-indigo-500/10 text-indigo-300 border-indigo-500/20",
+  out_for_delivery: "bg-violet-500/10 text-violet-300 border-violet-500/20",
+  delivered:        "bg-emerald-500/10 text-emerald-300 border-emerald-500/20",
+  cancelled:        "bg-red-500/10 text-red-300 border-red-500/20",
+  refunded:         "bg-zinc-500/10 text-zinc-300 border-zinc-500/20",
+};
+
+const STATUS_DOT: Record<string, string> = {
+  pending:          "bg-amber-400 animate-pulse",
+  processing:       "bg-sky-400",
+  packed:           "bg-indigo-400",
+  out_for_delivery: "bg-violet-400",
+  delivered:        "bg-emerald-400",
+  cancelled:        "bg-red-400",
+  refunded:         "bg-zinc-400",
+};
+
+/* ─── Promotion type accents ─────────────────────────────────────────── */
+const PROMO_ACCENT: Record<string, string> = {
+  homepage: "from-[#DFBA73]/60 to-[#C9A24B]/40",
+  seasonal: "from-sky-400/60 to-indigo-400/40",
+  flash:    "from-rose-400/60 to-pink-400/40",
+};
+const PROMO_ICON_BG: Record<string, string> = {
+  homepage: "bg-[#DFBA73]/10 text-[#DFBA73]",
+  seasonal: "bg-sky-500/10 text-sky-300",
+  flash:    "bg-rose-500/10 text-rose-300",
+};
+
+/* ─── Animation variants ─────────────────────────────────────────────── */
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 16, filter: 'blur(4px)' },
+  show: {
+    opacity: 1,
+    y: 0,
+    filter: 'blur(0px)',
+    transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] as const },
+  },
+};
+
+/* ─── StatusBadge ────────────────────────────────────────────────────── */
+function StatusBadge({ status }: { status: string }) {
+  const label = status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-wider font-mono ${STATUS_STYLE[status] || "bg-zinc-500/10 text-zinc-300 border-zinc-500/20"}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[status] || 'bg-zinc-400'}`} />
+      {label}
+    </span>
+  );
+}
+
+/* ─── FulfillmentTimeline ────────────────────────────────────────────── */
+function OrderFulfillmentTimeline({ status }: { status: string }) {
+  const steps  = ['pending', 'processing', 'packed', 'out_for_delivery', 'delivered'];
+  const labels = ['Pending', 'Processing', 'Packed', 'Transit', 'Delivered'];
+
+  if (status === 'cancelled' || status === 'refunded') {
+    return (
+      <div className="mt-4 flex items-center gap-2 rounded-xl bg-red-500/5 border border-red-500/10 px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-red-400/80 w-fit">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+        Order {status}
+      </div>
+    );
+  }
+
+  const currentIndex = steps.indexOf(status);
+
+  return (
+    <div className="mt-5 border-t border-white/[0.04] pt-4">
+      <p className="text-[9px] font-mono uppercase tracking-[0.2em] text-[#6B6B72] mb-4">Fulfillment Progress</p>
+      <div className="relative flex items-center justify-between px-1">
+        {/* Track */}
+        <div className="absolute left-0 right-0 top-[8px] h-[1px] bg-white/[0.05]" />
+        {/* Progress */}
+        <div
+          className="absolute left-0 top-[8px] h-[1px] bg-gradient-to-r from-[#DFBA73] to-[#C9A24B] transition-all duration-700"
+          style={{ width: `${(Math.max(0, currentIndex) / (steps.length - 1)) * 100}%` }}
+        />
+        {steps.map((step, index) => {
+          const isCompleted = index < currentIndex;
+          const isActive    = index === currentIndex;
+          return (
+            <div key={step} className="relative z-10 flex flex-col items-center">
+              <div className={`flex h-4 w-4 items-center justify-center rounded-full border transition-all duration-500 ${
+                isActive    ? 'border-[#DFBA73] bg-[#08080a] scale-[1.15] shadow-[0_0_10px_rgba(223,186,115,0.5)]'
+                : isCompleted ? 'border-[#DFBA73] bg-[#DFBA73]'
+                : 'border-white/10 bg-[#0E0E12]'
+              }`}>
+                {isActive    && <span className="h-1.5 w-1.5 rounded-full bg-[#DFBA73] animate-pulse" />}
+                {isCompleted && <span className="block h-1 w-1 rounded-full bg-[#08080a]" />}
+              </div>
+              <span className={`mt-2 text-[8px] font-mono uppercase tracking-wider whitespace-nowrap ${
+                isActive ? 'text-[#DFBA73] font-semibold' : isCompleted ? 'text-[#FAF9F6]/70' : 'text-[#3D3D45]'
+              }`}>
+                {labels[index]}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ─── PremiumStatCard ────────────────────────────────────────────────── */
+function StatCard({
+  label, value, sub, icon: Icon, accent = false, trend,
+}: {
+  label: string; value: string; sub?: string; icon?: any; accent?: boolean; trend?: string;
+}) {
+  return (
+    <motion.div
+      variants={itemVariants}
+      className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0E0E12]/60 backdrop-blur-xl p-5 transition-all duration-500 hover:border-[#DFBA73]/25 hover:shadow-[0_0_40px_rgba(223,186,115,0.06)]"
+    >
+      <div className="pointer-events-none absolute -right-6 -top-6 h-24 w-24 rounded-full bg-[#DFBA73]/[0.06] blur-2xl opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+
+      {/* Header row */}
+      <div className="flex items-start justify-between mb-4">
+        {Icon && (
+          <div className={`flex h-8 w-8 items-center justify-center rounded-xl transition-all duration-300 ${accent ? 'bg-[#DFBA73] shadow-[0_0_20px_rgba(223,186,115,0.3)]' : 'bg-white/[0.03] border border-white/[0.05] group-hover:border-[#DFBA73]/20'}`}>
+            <Icon className={`w-3.5 h-3.5 ${accent ? 'text-[#08080a]' : 'text-[#DFBA73]'}`} />
+          </div>
+        )}
+        {trend && (
+          <span className="flex items-center gap-1 text-[10px] font-mono text-emerald-400">
+            <ArrowUpRight className="w-3 h-3" /> {trend}
+          </span>
+        )}
+      </div>
+
+      <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">{label}</p>
+      <p className="mt-1.5 text-[22px] font-light text-[#FAF9F6] tabular-nums leading-none">{value}</p>
+      {sub && <p className="mt-1.5 text-[11px] font-light text-[#52525B]">{sub}</p>}
+
+      <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#DFBA73]/20 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
+    </motion.div>
+  );
+}
+
+/* ─── Main component ─────────────────────────────────────────────────── */
 export default function SellerDashboard({
-  orgName,
-  analyticsLocked,
-  suspended,
-  stats,
-  products,
-  orders,
-  promotions,
+  orgName, analyticsLocked, suspended, stats, products, orders, promotions,
 }: {
   orgName: string;
   analyticsLocked: boolean;
@@ -51,65 +202,120 @@ export default function SellerDashboard({
   const [tab, setTab] = useState('overview');
 
   return (
-    <div>
-      <header className="mb-10 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[10px] font-mono uppercase tracking-[0.4em] text-[#DFBA73]/80">brand studio</p>
-          <h1 className="mt-3 text-4xl font-light tracking-wide font-display text-[#FAF9F6]">{orgName}</h1>
-        </div>
-        <div className="flex gap-1 overflow-x-auto rounded-full border border-white/[0.06] bg-white/[0.01] p-1 no-scrollbar">
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setTab(t.id)}
-              data-cursor="hover"
-              className={`flex items-center gap-2 rounded-full px-4 py-2 text-[11px] font-mono uppercase tracking-wider transition-all ${
-                tab === t.id ? 'bg-[#DFBA73] text-[#08080a]' : 'text-[#8E8E93] hover:text-[#FAF9F6]'
-              }`}
-            >
-              <t.icon size={13} /> {t.label}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="space-y-8">
 
-      {suspended && (
-        <div className="mb-8 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/[0.08] px-5 py-4">
-          <Lock size={18} className="mt-0.5 shrink-0 text-red-400" />
+      {/* ── Brand hero header ──────────────────────────────────────── */}
+      <motion.header
+        initial={{ opacity: 0, y: -12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.65, ease: [0.16, 1, 0.3, 1] }}
+        className="relative overflow-hidden rounded-3xl border border-white/[0.06] bg-gradient-to-br from-[#0E0E12] via-[#121215] to-[#0A0A0D] p-8"
+      >
+        {/* Ambient orbs */}
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#DFBA73]/[0.07] blur-[100px]" />
+        <div className="pointer-events-none absolute -left-16 -bottom-16 h-48 w-48 rounded-full bg-[#6B3FA0]/[0.04] blur-[80px]" />
+
+        <div className="relative flex flex-wrap items-end justify-between gap-6">
+          {/* Brand info */}
           <div>
-            <p className="text-[13px] font-medium text-red-200">Brand suspended by Dobaeni</p>
-            <p className="mt-1 text-[12px] text-red-200/70">
-              Your brand has been suspended. Your storefront is hidden from customers and all sales are paused.
-              Contact support for more information.
+            <div className="flex items-center gap-2.5 mb-3">
+              <p className="text-[10px] font-mono uppercase tracking-[0.45em] text-[#DFBA73]/70">Brand Studio</p>
+              {!suspended && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 text-[8px] font-mono uppercase tracking-wider text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Live
+                </span>
+              )}
+            </div>
+            <h1 className="text-[42px] font-light tracking-wide font-display text-[#FAF9F6] leading-none">
+              {orgName}
+            </h1>
+            <p className="mt-2 text-[13px] font-light text-[#52525B]">
+              {stats.products} products · {formatNumber(stats.followers)} followers · {stats.avgRating.toFixed(1)} ★
             </p>
           </div>
+
+          {/* Tab strip */}
+          <div className="relative flex gap-1 overflow-x-auto rounded-full border border-white/[0.07] bg-white/[0.02] backdrop-blur-md p-1 no-scrollbar shadow-inner">
+            {TABS.map((t) => {
+              const isActive = tab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setTab(t.id)}
+                  data-cursor="hover"
+                  className={`relative flex items-center gap-2 rounded-full px-4 py-2.5 text-[10px] font-mono uppercase tracking-wider transition-colors duration-300 z-10 whitespace-nowrap ${
+                    isActive ? 'text-[#08080a]' : 'text-[#7C7C83] hover:text-[#FAF9F6]'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="sellerActiveTabIndicator"
+                      className="absolute inset-0 bg-[#DFBA73] rounded-full -z-10 shadow-[0_0_20px_rgba(223,186,115,0.3)]"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <t.icon size={11} />
+                  {t.label}
+                </button>
+              );
+            })}
+          </div>
         </div>
+
+        {/* Bottom gold line */}
+        <div className="absolute bottom-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-[#DFBA73]/30 to-transparent" />
+      </motion.header>
+
+      {/* ── Alert banners ──────────────────────────────────────────── */}
+      {suspended && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-start gap-4 rounded-2xl border border-red-500/20 bg-red-500/[0.04] p-5"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-500/10 border border-red-500/20">
+            <Lock size={14} className="text-red-400" />
+          </div>
+          <div>
+            <p className="text-[13px] font-medium text-red-200">Brand suspended by Dobaeni</p>
+            <p className="mt-1 text-[12px] text-red-200/60 leading-relaxed">
+              Your brand has been suspended. Your storefront is hidden from customers and all sales are paused. Contact support for more information.
+            </p>
+          </div>
+        </motion.div>
       )}
 
       {analyticsLocked && (
-        <div className="mb-8 flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-5 py-4">
-          <Lock size={18} className="mt-0.5 shrink-0 text-amber-400" />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="flex items-start gap-4 rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5"
+        >
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <Lock size={14} className="text-amber-400" />
+          </div>
           <div>
             <p className="text-[13px] font-medium text-amber-200">Analytics locked by Dobaeni</p>
-            <p className="mt-1 text-[12px] text-amber-200/70">
-              A platform administrator has temporarily hidden your brand's performance metrics. Your storefront and
-              products are unaffected. Contact support if you believe this is a mistake.
+            <p className="mt-1 text-[12px] text-amber-200/60 leading-relaxed">
+              A platform administrator has temporarily hidden your brand's performance metrics. Your storefront and products are unaffected.
             </p>
           </div>
-        </div>
+        </motion.div>
       )}
 
+      {/* ── Tab content ────────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
         <motion.div
           key={tab}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -12 }}
-          transition={{ duration: 0.25 }}
+          initial={{ opacity: 0, y: 16, filter: 'blur(5px)' }}
+          animate={{ opacity: 1, y: 0,  filter: 'blur(0px)' }}
+          exit={{   opacity: 0, y: -16, filter: 'blur(5px)' }}
+          transition={{ duration: 0.38, ease: [0.16, 1, 0.3, 1] }}
         >
-          {tab === 'overview' && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} />}
-          {tab === 'products' && <Products suspended={suspended} products={products} />}
-          {tab === 'orders' && <Orders suspended={suspended} orders={orders} />}
+          {tab === 'overview'   && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} />}
+          {tab === 'products'   && <Products suspended={suspended} products={products} />}
+          {tab === 'orders'     && <Orders   suspended={suspended} orders={orders} />}
           {tab === 'promotions' && <Promotions suspended={suspended} promotions={promotions} />}
         </motion.div>
       </AnimatePresence>
@@ -117,136 +323,186 @@ export default function SellerDashboard({
   );
 }
 
-// ── Overview ───────────────────────────────────────────────────────────
-
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5">
-      <p className="text-[10px] font-mono uppercase tracking-widest text-[#7C7C83]">{label}</p>
-      <p className="mt-2 text-2xl font-light text-[#DFBA73]">{value}</p>
-      {sub && <p className="mt-1 text-[11px] text-[#52525B]">{sub}</p>}
-    </div>
-  );
-}
-
+/* ═══ Overview ═══════════════════════════════════════════════════════════ */
 function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean; stats: SellerStats; orders: OrderView[] }) {
-  return (
-    <div>
-      {analyticsLocked ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-amber-500/20 bg-amber-500/[0.04] py-20 text-center">
-          <Lock size={32} className="text-amber-400/60" />
-          <p className="mt-4 text-[15px] text-amber-200/80">Analytics are hidden</p>
-          <p className="mt-1 max-w-sm text-[13px] text-amber-200/50">
-            A platform administrator has locked your brand's analytics. Contact support if you believe this is a
-            mistake.
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-            <StatCard label="Revenue" value={formatPrice(stats.revenue)} />
-            <StatCard label="Orders" value={formatNumber(stats.orders)} sub={`${stats.pendingOrders} pending`} />
-            <StatCard label="Products" value={formatNumber(stats.products)} />
-            <StatCard label="Followers" value={formatNumber(stats.followers)} />
-            <StatCard label="Profile views" value={formatNumber(stats.views)} />
-            <StatCard label="Avg rating" value={stats.avgRating.toFixed(1)} />
-            <StatCard label="Units sold" value={formatNumber(orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0))} />
-            <StatCard label="Conversion" value={stats.views ? `${((stats.orders / stats.views) * 100).toFixed(1)}%` : '0%'} />
-          </div>
+  const totalUnits = orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0);
+  const conversion = stats.views ? `${((stats.orders / stats.views) * 100).toFixed(1)}%` : '0%';
 
-          <h2 className="mt-10 mb-4 text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">Recent orders</h2>
-          {orders.length === 0 ? (
-            <p className="rounded-2xl border border-white/[0.06] bg-white/[0.01] px-5 py-8 text-center text-[13px] text-[#52525B]">
-              No orders yet.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {orders.slice(0, 5).map((o) => (
-                <div key={o.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.01] px-4 py-3 text-[13px]">
-                  <span className="font-mono text-[#8E8E93]">{o.orderNumber}</span>
-                  <span className="text-[#FAF9F6]">{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
-                  <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
-                  <span className="text-[11px] uppercase tracking-wider text-[#7C7C83]">{o.status.replace('_', ' ')}</span>
-                </div>
-              ))}
+  if (analyticsLocked) {
+    return (
+      <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-amber-500/15 bg-amber-500/[0.02] py-24 text-center">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-500/10 border border-amber-500/15 mb-4">
+          <Lock size={22} className="text-amber-400/60" />
+        </div>
+        <p className="text-[15px] text-amber-200/80 font-light">Analytics are hidden</p>
+        <p className="mt-2 max-w-sm text-[13px] text-amber-200/40 leading-relaxed font-light">
+          A platform administrator has locked your brand's analytics. Contact support if you believe this is a mistake.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-10">
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <StatCard label="Revenue"       value={formatPrice(stats.revenue)}           icon={DollarSign}  accent />
+        <StatCard label="Orders"        value={formatNumber(stats.orders)}            icon={ShoppingBag} sub={`${stats.pendingOrders} pending`} />
+        <StatCard label="Products"      value={formatNumber(stats.products)}          icon={Package} />
+        <StatCard label="Followers"     value={formatNumber(stats.followers)}         icon={Users} />
+        <StatCard label="Profile Views" value={formatNumber(stats.views)}             icon={Eye} />
+        <StatCard label="Avg Rating"    value={stats.avgRating.toFixed(1)}            icon={Star} />
+        <StatCard label="Units Sold"    value={formatNumber(totalUnits)}              icon={Layers} />
+        <StatCard label="Conversion"    value={conversion}                            icon={TrendingUp} />
+      </div>
+
+      {/* Quick KPI strip */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {[
+          { label: "Pending fulfillment", value: `${stats.pendingOrders}`, icon: Clock,         color: "text-amber-400" },
+          { label: "Products live",       value: `${stats.products}`,      icon: CheckCircle2,  color: "text-emerald-400" },
+          { label: "Brand rating",        value: `${stats.avgRating.toFixed(1)} ★`, icon: Sparkles, color: "text-[#DFBA73]" },
+        ].map((item) => (
+          <div key={item.label} className="flex items-center gap-3.5 rounded-xl border border-white/[0.05] bg-white/[0.015] px-4 py-3 backdrop-blur-sm">
+            <item.icon className={`w-4 h-4 shrink-0 ${item.color}`} />
+            <div>
+              <p className="text-[10px] font-mono uppercase tracking-wider text-[#52525B]">{item.label}</p>
+              <p className="text-[15px] font-light text-[#FAF9F6] tabular-nums">{item.value}</p>
             </div>
+          </div>
+        ))}
+      </motion.div>
+
+      {/* Recent orders */}
+      <motion.div variants={itemVariants} className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Activity className="w-3.5 h-3.5 text-[#DFBA73]/60" />
+            <h2 className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#8E8E93]">Recent Orders</h2>
+          </div>
+          {orders.length > 5 && (
+            <span className="text-[10px] font-mono text-[#52525B]">Showing 5 of {orders.length}</span>
           )}
-        </>
-      )}
-    </div>
+        </div>
+        {orders.length === 0 ? (
+          <div className="flex h-32 items-center justify-center rounded-2xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20">
+            <p className="text-[13px] text-[#52525B] font-light">No orders yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {orders.slice(0, 5).map((o) => (
+              <div key={o.id} className="group flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-[#0E0E12]/40 px-4 py-3 transition-all duration-300 hover:border-[#DFBA73]/15 hover:bg-[#0E0E12]/70">
+                <span className="font-mono text-[12px] text-[#FAF9F6]">{o.orderNumber}</span>
+                <span className="text-[12px] text-[#52525B]">{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
+                <span className="text-[13px] text-[#DFBA73] font-light tabular-nums">{formatPrice(o.totalAmount, o.currency)}</span>
+                <StatusBadge status={o.status} />
+              </div>
+            ))}
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
   );
 }
 
-// ── Products ───────────────────────────────────────────────────────────
-
+/* ═══ Products ═══════════════════════════════════════════════════════════ */
 function Products({ suspended, products }: { suspended: boolean; products: SellerProductView[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<SellerProductView | null>(null);
 
-  function openCreate() {
-    setEditing(null);
-    setShowForm(true);
-  }
-  function openEdit(p: SellerProductView) {
-    setEditing(p);
-    setShowForm(true);
-  }
+  function openCreate() { setEditing(null); setShowForm(true); }
+  function openEdit(p: SellerProductView) { setEditing(p); setShowForm(true); }
 
   if (showForm) {
     return <ProductForm product={editing} onClose={() => { setShowForm(false); router.refresh(); }} />;
   }
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <p className="text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">{products.length} products</p>
+    <motion.div variants={containerVariants} initial="hidden" animate="show" className="space-y-6">
+      <motion.div variants={itemVariants} className="flex items-center justify-between border-b border-white/[0.04] pb-4">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">{products.length} products in catalog</p>
+        </div>
         {!suspended && (
           <button
             onClick={openCreate}
             data-cursor="hover"
-            className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]"
+            className="flex items-center gap-2 rounded-full bg-[#DFBA73] px-5 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.25)] active:scale-95"
           >
-            <Plus size={15} /> Add product
+            <Plus size={13} /> Add product
           </button>
         )}
-      </div>
+      </motion.div>
 
       {products.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-3xl border border-white/[0.06] bg-white/[0.01] py-20 text-center">
-          <Package size={30} className="text-[#52525B]" />
-          <p className="mt-4 text-[14px] text-[#7C7C83]">No products yet. List your first piece.</p>
-        </div>
+        <motion.div variants={itemVariants} className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.02] border border-white/[0.04] mb-4">
+            <Package size={24} className="text-[#52525B]" />
+          </div>
+          <p className="text-[14px] text-[#8E8E93] font-light max-w-xs leading-relaxed">No products yet. List your first piece into the catalog.</p>
+        </motion.div>
       ) : (
-        <div className="overflow-hidden rounded-2xl border border-white/[0.06]">
+        <motion.div variants={itemVariants} className="space-y-3">
           {products.map((p) => (
-            <div key={p.id} className="flex items-center gap-4 border-b border-white/[0.04] bg-white/[0.01] px-4 py-3 last:border-0">
-              <div className="h-14 w-12 shrink-0 overflow-hidden rounded-lg bg-[#0E0E12]">
-                <SafeImage src={p.image} alt={p.name} className="h-full w-full object-cover" />
+            <div
+              key={p.id}
+              className="group flex items-center gap-4 rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-4 transition-all duration-300 hover:border-[#DFBA73]/20 hover:bg-[#0E0E12]/80 hover:shadow-[0_0_20px_rgba(223,186,115,0.04)]"
+            >
+              {/* Product image */}
+              <div className="relative h-16 w-14 shrink-0 overflow-hidden rounded-xl bg-[#0A0A0D] border border-white/[0.04]">
+                <SafeImage
+                  src={p.image}
+                  alt={p.name}
+                  className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+                />
               </div>
+
+              {/* Details */}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] text-[#FAF9F6]">{p.name}</p>
-                <p className="text-[11px] text-[#52525B]">
-                  {formatPrice(p.price, p.currency)} · {p.stock} in stock · {p.soldCount} sold
+                <p className="truncate text-[14px] font-light text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73] duration-300">
+                  {p.name}
                 </p>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-[#52525B]">
+                  <span className="text-[#DFBA73] font-light">{formatPrice(p.price, p.currency)}</span>
+                  <span className="text-white/10">·</span>
+                  <span className={p.stock <= 5 ? "text-amber-400 font-medium" : ""}>{p.stock} in stock</span>
+                  <span className="text-white/10">·</span>
+                  <span>{p.soldCount} sold</span>
+                </div>
               </div>
-              <span className={`rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${p.isPublished ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
-                {p.isPublished ? 'Live' : 'Draft'}
+
+              {/* Status badge */}
+              <span className={`inline-flex items-center gap-1.5 shrink-0 rounded-full border px-2.5 py-0.5 text-[9px] uppercase tracking-wider font-mono ${p.isPublished ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'}`}>
+                {p.isPublished ? (
+                  <><span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />Live</>
+                ) : (
+                  <><span className="h-1.5 w-1.5 rounded-full bg-zinc-500" />Draft</>
+                )}
               </span>
-              <div className="flex items-center gap-1">
-                <button onClick={() => openEdit(p)} disabled={suspended} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-[#DFBA73] disabled:opacity-30 disabled:pointer-events-none" aria-label="Edit">
-                  <Pencil size={15} />
+
+              {/* Actions */}
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => openEdit(p)}
+                  disabled={suspended}
+                  data-cursor="hover"
+                  className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-[#DFBA73] disabled:opacity-30 disabled:pointer-events-none active:scale-90"
+                  aria-label="Edit"
+                >
+                  <Pencil size={13} />
                 </button>
                 <DeleteProduct id={p.id} disabled={suspended} onDone={() => router.refresh()} />
               </div>
             </div>
           ))}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }
 
+/* ─── DeleteProduct ──────────────────────────────────────────────────── */
 function DeleteProduct({ id, disabled, onDone }: { id: string; disabled?: boolean; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   async function del() {
@@ -255,19 +511,23 @@ function DeleteProduct({ id, disabled, onDone }: { id: string; disabled?: boolea
     try {
       await fetch(`/api/products/${id}`, { method: 'DELETE' });
       onDone();
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
   return (
-    <button onClick={del} disabled={busy || disabled} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-red-400 disabled:opacity-40" aria-label="Delete">
-      {busy ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+    <button
+      onClick={del}
+      disabled={busy || disabled}
+      data-cursor="hover"
+      className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-red-400 disabled:opacity-40 active:scale-90"
+      aria-label="Delete"
+    >
+      {busy ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
     </button>
   );
 }
 
+/* ─── ProductForm ────────────────────────────────────────────────────── */
 function ProductForm({ product, onClose }: { product: SellerProductView | null; onClose: () => void }) {
-  const router = useRouter();
   const [form, setForm] = useState({
     name: product?.name ?? '',
     description: '',
@@ -283,33 +543,32 @@ function ProductForm({ product, onClose }: { product: SellerProductView | null; 
     images: [] as string[],
   });
   const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [err, setErr]   = useState<string | null>(null);
 
   const set = (k: string, v: any) => setForm((f) => ({ ...f, [k]: v }));
   const toArr = (s: string) => s.split(',').map((x) => x.trim()).filter(Boolean);
 
   async function submit() {
-    setBusy(true);
-    setErr(null);
+    setBusy(true); setErr(null);
     const payload = {
-      name: form.name,
-      description: form.description || null,
-      price: Number(form.price),
+      name:           form.name,
+      description:    form.description || null,
+      price:          Number(form.price),
       compareAtPrice: form.compareAtPrice ? Number(form.compareAtPrice) : null,
-      stock: Number(form.stock) || 0,
-      currency: 'NPR',
-      material: form.material || null,
-      gender: form.gender || null,
-      sizes: toArr(form.sizes),
-      colors: toArr(form.colors),
-      styleKeywords: toArr(form.styleKeywords),
-      occasion: toArr(form.occasion),
-      images: form.images,
+      stock:          Number(form.stock) || 0,
+      currency:       'NPR',
+      material:       form.material || null,
+      gender:         form.gender || null,
+      sizes:          toArr(form.sizes),
+      colors:         toArr(form.colors),
+      styleKeywords:  toArr(form.styleKeywords),
+      occasion:       toArr(form.occasion),
+      images:         form.images,
     };
     try {
       const res = product
         ? await fetch(`/api/products/${product.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-        : await fetch('/api/products', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        : await fetch('/api/products',               { method: 'POST',  headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
       onClose();
@@ -319,86 +578,104 @@ function ProductForm({ product, onClose }: { product: SellerProductView | null; 
     }
   }
 
-  const input = 'w-full rounded-xl border border-white/[0.08] bg-[#0E0E12] px-4 py-3 text-[13px] text-[#FAF9F6] outline-none placeholder:text-[#52525B] focus:border-[#DFBA73]/40';
+  const inputCls = 'w-full rounded-xl border border-white/[0.07] bg-[#0A0A0D] px-4 py-3 text-[13px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all focus:shadow-[0_0_14px_rgba(223,186,115,0.08)]';
 
   return (
-    <div className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <motion.div
+      initial={{ opacity: 0, scale: 0.98, y: 12 }}
+      animate={{ opacity: 1, scale: 1,    y: 0 }}
+      exit={{   opacity: 0, scale: 0.98,  y: 12 }}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      className="rounded-3xl border border-white/[0.08] bg-[#0E0E12]/70 backdrop-blur-2xl p-6 shadow-2xl space-y-6"
+    >
+      <div className="flex items-center justify-between border-b border-white/[0.04] pb-4">
         <h3 className="text-lg font-light font-display text-[#FAF9F6]">{product ? 'Edit product' : 'New product'}</h3>
-        <button onClick={onClose} className="text-[#8E8E93] hover:text-[#FAF9F6]"><X size={18} /></button>
+        <button onClick={onClose} className="rounded-full p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-[#FAF9F6]">
+          <X size={15} />
+        </button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <div className="md:col-span-2">
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Images</label>
-          <ImageUpload value={form.images} onChange={(v) => set('images', v)} multiple label="Add images" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Images</label>
+          <div className="rounded-2xl border border-white/[0.05] bg-black/20 p-3">
+            <ImageUpload value={form.images} onChange={(v) => set('images', v)} multiple label="Add product images" />
+          </div>
         </div>
         <div className="md:col-span-2">
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Name</label>
-          <input value={form.name} onChange={(e) => set('name', e.target.value)} className={input} placeholder="Product name" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Name</label>
+          <input value={form.name} onChange={(e) => set('name', e.target.value)} className={inputCls} placeholder="e.g. Silk Drape Atelier Coat" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Price (NPR)</label>
-          <input value={form.price} onChange={(e) => set('price', e.target.value)} type="number" className={input} placeholder="1200" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Price (NPR)</label>
+          <input value={form.price} onChange={(e) => set('price', e.target.value)} type="number" className={inputCls} placeholder="1200" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Compare-at (optional)</label>
-          <input value={form.compareAtPrice} onChange={(e) => set('compareAtPrice', e.target.value)} type="number" className={input} placeholder="1800" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Compare-at Price (optional)</label>
+          <input value={form.compareAtPrice} onChange={(e) => set('compareAtPrice', e.target.value)} type="number" className={inputCls} placeholder="1800" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Stock</label>
-          <input value={form.stock} onChange={(e) => set('stock', e.target.value)} type="number" className={input} placeholder="10" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Stock Quantity</label>
+          <input value={form.stock} onChange={(e) => set('stock', e.target.value)} type="number" className={inputCls} placeholder="10" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Gender</label>
-          <select value={form.gender} onChange={(e) => set('gender', e.target.value)} className={input}>
-            <option value="" className="bg-[#121215]">Any</option>
-            <option value="female" className="bg-[#121215]">Women</option>
-            <option value="male" className="bg-[#121215]">Men</option>
-            <option value="unisex" className="bg-[#121215]">Unisex</option>
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Gender</label>
+          <select value={form.gender} onChange={(e) => set('gender', e.target.value)} className={inputCls}>
+            <option value="" className="bg-[#0A0A0D]">Any / Unisex</option>
+            <option value="female" className="bg-[#0A0A0D]">Women</option>
+            <option value="male" className="bg-[#0A0A0D]">Men</option>
+            <option value="unisex" className="bg-[#0A0A0D]">Unisex</option>
           </select>
         </div>
         <div className="md:col-span-2">
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Description</label>
-          <textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={3} className={`${input} resize-none`} placeholder="Describe the piece…" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Description</label>
+          <textarea value={form.description} onChange={(e) => set('description', e.target.value)} rows={4} className={`${inputCls} resize-none`} placeholder="Describe the fabrics, silhouette, fit, and construction details..." />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Sizes (comma)</label>
-          <input value={form.sizes} onChange={(e) => set('sizes', e.target.value)} className={input} placeholder="S, M, L, XL" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Sizes (comma separated)</label>
+          <input value={form.sizes} onChange={(e) => set('sizes', e.target.value)} className={inputCls} placeholder="S, M, L, XL" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Colors (comma)</label>
-          <input value={form.colors} onChange={(e) => set('colors', e.target.value)} className={input} placeholder="Black, Ivory" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Colors (comma separated)</label>
+          <input value={form.colors} onChange={(e) => set('colors', e.target.value)} className={inputCls} placeholder="Black, Ivory, Sage" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Style keywords (comma)</label>
-          <input value={form.styleKeywords} onChange={(e) => set('styleKeywords', e.target.value)} className={input} placeholder="Minimalist, Old Money" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Style Keywords</label>
+          <input value={form.styleKeywords} onChange={(e) => set('styleKeywords', e.target.value)} className={inputCls} placeholder="Minimalist, Quiet Luxury, Oversized" />
         </div>
         <div>
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Occasion (comma)</label>
-          <input value={form.occasion} onChange={(e) => set('occasion', e.target.value)} className={input} placeholder="Party, Work" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Occasion</label>
+          <input value={form.occasion} onChange={(e) => set('occasion', e.target.value)} className={inputCls} placeholder="Evening, Formal, Lounge" />
         </div>
         <div className="md:col-span-2">
-          <label className="mb-1.5 block text-[11px] font-mono uppercase tracking-widest text-[#7C7C83]">Material</label>
-          <input value={form.material} onChange={(e) => set('material', e.target.value)} className={input} placeholder="100% Cotton" />
+          <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Material</label>
+          <input value={form.material} onChange={(e) => set('material', e.target.value)} className={inputCls} placeholder="e.g. 100% Organic Silk Gingham" />
         </div>
       </div>
 
-      {err && <p className="mt-4 text-[12px] text-red-400">{err}</p>}
-      <button
-        onClick={submit}
-        disabled={busy || !form.name || !form.price}
-        className="mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#DFBA73] px-7 py-3.5 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] disabled:opacity-40"
-      >
-        {busy && <Loader2 size={15} className="animate-spin" />}
-        {product ? 'Save changes' : 'Create product'}
-      </button>
-    </div>
+      {err && <p className="text-[12px] text-red-400 font-mono">{err}</p>}
+
+      <div className="flex justify-end gap-3 border-t border-white/[0.04] pt-5">
+        <button
+          onClick={onClose}
+          className="rounded-full border border-white/[0.07] px-6 py-3 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#52525B] transition-all hover:text-[#FAF9F6] hover:border-white/20 active:scale-95"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={submit}
+          disabled={busy || !form.name || !form.price}
+          className="flex items-center justify-center gap-2 rounded-full bg-[#DFBA73] px-7 py-3 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.3)] disabled:opacity-40 active:scale-95"
+        >
+          {busy && <Loader2 size={13} className="animate-spin" />}
+          {product ? 'Save changes' : 'Create product'}
+        </button>
+      </div>
+    </motion.div>
   );
 }
 
-// ── Orders ──────────────────────────────────────────────────────────────
-
+/* ═══ Orders ═════════════════════════════════════════════════════════════ */
 function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[] }) {
   const [list, setList] = useState(orders);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -413,55 +690,74 @@ function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[]
       });
       if (res.ok) {
         const { order } = await res.json();
-        setList((l) => l.map((o) => (o.id === id ? { ...o, status: order.status, trackingNumber: order.trackingNumber, courierName: order.courierName } : o)));
+        setList((l) => l.map((o) => o.id === id ? { ...o, status: order.status, trackingNumber: order.trackingNumber, courierName: order.courierName } : o));
       }
-    } finally {
-      setBusyId(null);
-    }
+    } finally { setBusyId(null); }
   }
 
   if (list.length === 0) {
-    return <p className="rounded-3xl border border-white/[0.06] bg-white/[0.01] py-20 text-center text-[14px] text-[#7C7C83]">No orders yet.</p>;
+    return (
+      <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24">
+        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.02] border border-white/[0.04] mb-4">
+          <ShoppingBag size={22} className="text-[#52525B]" />
+        </div>
+        <p className="text-[14px] text-[#52525B] font-light">No orders yet.</p>
+      </div>
+    );
   }
 
   return (
     <div className="space-y-4">
       {list.map((o) => (
-        <div key={o.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <div key={o.id} className="group rounded-2xl border border-white/[0.05] bg-[#0E0E12]/50 p-5 transition-all duration-300 hover:border-white/10">
+          {/* Order header */}
+          <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="font-mono text-[13px] text-[#FAF9F6]">{o.orderNumber}</p>
-              <p className="text-[11px] text-[#52525B]">{formatDate(o.createdAt)} · {formatPrice(o.totalAmount, o.currency)}</p>
+              <p className="font-mono text-[13px] font-medium text-[#FAF9F6]">{o.orderNumber}</p>
+              <p className="mt-1 text-[11px] text-[#52525B]">
+                {formatDate(o.createdAt)} · <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
+              </p>
             </div>
-            <div className="flex items-center gap-2">
-              {busyId === o.id && <Loader2 size={14} className="animate-spin text-[#DFBA73]" />}
+            <div className="flex items-center gap-3">
+              {busyId === o.id && <Loader2 size={13} className="animate-spin text-[#DFBA73]" />}
               <select
                 value={o.status}
                 disabled={busyId === o.id || suspended}
                 onChange={(e) => update(o.id, e.target.value)}
-                className="rounded-xl border border-white/[0.08] bg-[#0E0E12] px-3 py-2 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 disabled:opacity-40 disabled:cursor-not-allowed"
+                className="rounded-xl border border-white/[0.07] bg-[#0A0A0D] px-3.5 py-2.5 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
               >
                 {ORDER_STATUSES.map((s) => (
-                  <option key={s} value={s} className="bg-[#121215]">{s.replace('_', ' ')}</option>
+                  <option key={s} value={s} className="bg-[#0E0E12]">{s.replace(/_/g, ' ')}</option>
                 ))}
               </select>
             </div>
           </div>
-          <div className="mt-3 space-y-2 border-t border-white/[0.06] pt-3">
+
+          {/* Order items */}
+          <div className="mt-4 space-y-3 border-t border-white/[0.04] pt-4">
             {o.items.map((it) => (
-              <div key={it.id} className="flex items-center gap-3 text-[13px]">
-                <div className="h-10 w-8 overflow-hidden rounded bg-[#0E0E12]">
+              <div key={it.id} className="flex items-center gap-3">
+                <div className="h-12 w-10 shrink-0 overflow-hidden rounded-lg border border-white/[0.04] bg-[#0A0A0D]">
                   <SafeImage src={it.productImage} alt="" className="h-full w-full object-cover" />
                 </div>
-                <span className="flex-1 truncate text-[#FAF9F6]">{it.productName}</span>
-                <span className="text-[#7C7C83]">×{it.quantity}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="block truncate text-[13px] font-light text-[#FAF9F6]">{it.productName}</span>
+                  <span className="block text-[10px] text-[#52525B] mt-0.5 font-mono">
+                    {it.size ? `Size: ${it.size}` : ''}{it.color ? ` · Color: ${it.color}` : ''}
+                  </span>
+                </div>
+                <span className="text-[12px] text-[#52525B]">×{it.quantity}</span>
               </div>
             ))}
           </div>
+
+          <OrderFulfillmentTimeline status={o.status} />
+
           {o.trackingNumber && (
-            <p className="mt-3 text-[11px] text-[#7C7C83]">
-              {o.courierName || 'Courier'}: <span className="text-[#FAF9F6]">{o.trackingNumber}</span>
-            </p>
+            <div className="mt-4 flex items-center justify-between rounded-xl bg-white/[0.015] border border-white/[0.04] px-3.5 py-2.5 text-[11px] text-[#52525B]">
+              <span>Carrier: <strong className="text-[#FAF9F6] font-mono ml-1">{o.courierName || 'Standard'}</strong></span>
+              <span>Tracking: <strong className="text-[#DFBA73] font-mono ml-1">{o.trackingNumber}</strong></span>
+            </div>
           )}
         </div>
       ))}
@@ -469,13 +765,12 @@ function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[]
   );
 }
 
-// ── Promotions ──────────────────────────────────────────────────────────
-
+/* ═══ Promotions ═════════════════════════════════════════════════════════ */
 function Promotions({ suspended, promotions }: { suspended: boolean; promotions: Promotion[] }) {
   const router = useRouter();
-  const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ title: '', type: 'homepage', budget: '', startDate: '', endDate: '' });
+  const [open, setOpen]   = useState(false);
+  const [busy, setBusy]   = useState(false);
+  const [form, setForm]   = useState({ title: '', type: 'homepage', budget: '', startDate: '', endDate: '' });
 
   async function create() {
     setBusy(true);
@@ -484,11 +779,11 @@ function Promotions({ suspended, promotions }: { suspended: boolean; promotions:
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: form.title,
-          type: form.type,
-          budget: form.budget ? Number(form.budget) : null,
+          title:     form.title,
+          type:      form.type,
+          budget:    form.budget ? Number(form.budget) : null,
           startDate: form.startDate || null,
-          endDate: form.endDate || null,
+          endDate:   form.endDate   || null,
         }),
       });
       if (res.ok) {
@@ -496,63 +791,129 @@ function Promotions({ suspended, promotions }: { suspended: boolean; promotions:
         setForm({ title: '', type: 'homepage', budget: '', startDate: '', endDate: '' });
         router.refresh();
       }
-    } finally {
-      setBusy(false);
-    }
+    } finally { setBusy(false); }
   }
 
-  const input = 'w-full rounded-xl border border-white/[0.08] bg-[#0E0E12] px-4 py-3 text-[13px] text-[#FAF9F6] outline-none placeholder:text-[#52525B] focus:border-[#DFBA73]/40';
+  const inputCls = 'w-full rounded-xl border border-white/[0.07] bg-[#0A0A0D] px-4 py-3 text-[13px] text-[#FAF9F6] outline-none placeholder:text-[#3D3D45] focus:border-[#DFBA73]/40 transition-all focus:shadow-[0_0_14px_rgba(223,186,115,0.08)]';
+
+  const PROMO_TYPES = [
+    { value: 'homepage', label: 'Homepage Feature Spotlight',  icon: Zap },
+    { value: 'seasonal', label: 'Seasonal Curator Carousel',   icon: Sparkles },
+    { value: 'flash',    label: 'Flash Capsule Sale',          icon: Activity },
+  ];
 
   return (
-    <div>
-      <div className="mb-6 flex items-center justify-between">
-        <p className="text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">{promotions.length} campaigns</p>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between border-b border-white/[0.04] pb-4">
+        <p className="text-[10px] font-mono uppercase tracking-[0.2em] text-[#6B6B72]">{promotions.length} campaigns</p>
         {!suspended && (
-          <button onClick={() => setOpen((v) => !v)} data-cursor="hover" className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]">
-            <Plus size={15} /> New campaign
+          <button
+            onClick={() => setOpen((v) => !v)}
+            data-cursor="hover"
+            className="flex items-center gap-2 rounded-full bg-[#DFBA73] px-5 py-2.5 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.25)] active:scale-95"
+          >
+            {open ? <X size={13} /> : <Plus size={13} />}
+            {open ? 'Cancel' : 'New campaign'}
           </button>
         )}
       </div>
 
       <AnimatePresence>
         {open && (
-          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-6 overflow-hidden">
-            <div className="rounded-3xl border border-white/[0.08] bg-white/[0.02] p-6">
-              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Campaign title" className={`${input} mb-4`} />
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={input}>
-                  <option value="homepage" className="bg-[#121215]">Homepage feature</option>
-                  <option value="seasonal" className="bg-[#121215]">Seasonal</option>
-                  <option value="flash" className="bg-[#121215]">Flash sale</option>
-                </select>
-                <input value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} type="number" placeholder="Budget (NPR)" className={input} />
-                <input value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} type="date" className={input} />
-                <input value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} type="date" className={input} />
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{   opacity: 0, height: 0 }}
+            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="rounded-3xl border border-white/[0.08] bg-[#0E0E12]/70 backdrop-blur-2xl p-6 shadow-2xl space-y-4">
+              <div>
+                <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Campaign Title</label>
+                <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Winter Solstice Collection Launch" className={inputCls} />
               </div>
-              <button onClick={create} disabled={busy || !form.title} className="mt-5 flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-7 py-3.5 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] disabled:opacity-40">
-                {busy && <Loader2 size={15} className="animate-spin" />} Launch
-              </button>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Placement Type</label>
+                  <select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className={inputCls}>
+                    {PROMO_TYPES.map((t) => (
+                      <option key={t.value} value={t.value} className="bg-[#0A0A0D]">{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Budget (NPR)</label>
+                  <input value={form.budget} onChange={(e) => setForm({ ...form, budget: e.target.value })} type="number" placeholder="Budget (NPR)" className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">Start Date</label>
+                  <input value={form.startDate} onChange={(e) => setForm({ ...form, startDate: e.target.value })} type="date" className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-2 block text-[10px] font-mono uppercase tracking-widest text-[#6B6B72]">End Date</label>
+                  <input value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })} type="date" className={inputCls} />
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 border-t border-white/[0.04] pt-4">
+                <button onClick={create} disabled={busy || !form.title} className="flex items-center gap-2 rounded-full bg-[#DFBA73] px-7 py-3 text-[10px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3] hover:shadow-[0_0_20px_rgba(223,186,115,0.3)] disabled:opacity-40 active:scale-95">
+                  {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={12} />}
+                  Launch Campaign
+                </button>
+              </div>
             </div>
           </motion.div>
         )}
       </AnimatePresence>
 
       {promotions.length === 0 ? (
-        <p className="rounded-3xl border border-white/[0.06] bg-white/[0.01] py-20 text-center text-[14px] text-[#7C7C83]">No campaigns yet.</p>
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-white/[0.05] bg-[#0E0E12]/20 py-24 text-center">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/[0.02] border border-white/[0.04] mb-4">
+            <Megaphone size={22} className="text-[#52525B]" />
+          </div>
+          <p className="text-[14px] text-[#52525B] font-light max-w-xs leading-relaxed">No campaigns yet. Launch a promotion to increase catalog views.</p>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {promotions.map((p) => (
-            <div key={p.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-[14px] text-[#FAF9F6]">{p.title}</p>
-                <span className={`rounded-full px-2.5 py-1 text-[10px] font-mono uppercase tracking-wider ${p.status === 'active' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-zinc-500/10 text-zinc-400'}`}>
-                  {p.status}
-                </span>
+          {promotions.map((p) => {
+            const accentCls = PROMO_ACCENT[p.type]   ?? PROMO_ACCENT.homepage;
+            const iconBgCls = PROMO_ICON_BG[p.type]  ?? PROMO_ICON_BG.homepage;
+            const PromoIcon = p.type === 'flash' ? Activity : p.type === 'seasonal' ? Sparkles : Zap;
+            return (
+              <div key={p.id} className="group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-[#0E0E12]/50 p-5 transition-all duration-300 hover:border-white/10 hover:shadow-[0_0_30px_rgba(223,186,115,0.04)]">
+                {/* Top color accent */}
+                <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${accentCls}`} />
+
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${iconBgCls} border border-current/10`}>
+                    <PromoIcon size={14} />
+                  </div>
+                  <span className={`rounded-full border px-2.5 py-0.5 text-[8px] font-mono uppercase tracking-wider ${p.status === 'active' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-zinc-500/10 border-zinc-500/20 text-zinc-400'}`}>
+                    {p.status ?? 'pending'}
+                  </span>
+                </div>
+
+                <p className="text-[13px] font-light text-[#FAF9F6] truncate pr-2">{p.title}</p>
+                <p className="mt-1 text-[10px] font-mono uppercase tracking-wider text-[#52525B]">{p.type} campaign</p>
+
+                <div className="mt-4 border-t border-white/[0.04] pt-4 space-y-2">
+                  {p.budget != null && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#52525B]">
+                      <DollarSign size={11} className="text-[#DFBA73]" />
+                      <span>Budget: <strong className="text-[#FAF9F6] font-normal">{formatPrice(p.budget)}</strong></span>
+                    </div>
+                  )}
+                  {(p.startDate || p.endDate) && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-[#52525B]">
+                      <Calendar size={11} />
+                      <span className="text-[10px] font-mono">
+                        {p.startDate ? formatDate(p.startDate) : 'Start'} – {p.endDate ? formatDate(p.endDate) : 'End'}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
-              <p className="mt-1 text-[11px] capitalize text-[#7C7C83]">{p.type}</p>
-              {p.budget != null && <p className="mt-2 text-[12px] text-[#DFBA73]">Budget {formatPrice(p.budget)}</p>}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -508,17 +508,38 @@ export async function getBoards(userId: string): Promise<BoardSummary[]> {
   const boards = await db.board.findMany({
     where: { userId },
     orderBy: { createdAt: 'desc' },
-    include: { _count: { select: { savedItems: true } } },
+    include: {
+      _count: { select: { savedItems: true } },
+      savedItems: {
+        orderBy: { createdAt: 'desc' },
+        take: 4,
+        include: {
+          product: {
+            include: {
+              images: { orderBy: { position: 'asc' }, take: 1 },
+            },
+          },
+        },
+      },
+    },
   });
-  return boards.map((b: any) => ({
-    id: b.id,
-    name: b.name,
-    slug: b.slug,
-    description: b.description,
-    coverImage: b.coverImage,
-    type: b.type || 'collection',
-    itemCount: b._count.savedItems,
-  }));
+  return boards.map((b: any) => {
+    const previewImages: string[] = [];
+    b.savedItems.forEach((si: any) => {
+      const img = si.product?.images?.[0]?.url;
+      if (img) previewImages.push(img);
+    });
+    return {
+      id: b.id,
+      name: b.name,
+      slug: b.slug,
+      description: b.description,
+      coverImage: b.coverImage,
+      type: b.type || 'collection',
+      itemCount: b._count.savedItems,
+      previewImages,
+    };
+  });
 }
 
 export type BoardDetail = BoardSummary & {

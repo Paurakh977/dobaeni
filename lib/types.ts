@@ -48,4 +48,5 @@ export type BoardSummary = {
   coverImage: string | null;
   type: string;
   itemCount: number;
+  previewImages?: string[];
 };
