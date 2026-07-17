@@ -42,6 +42,9 @@ function productCard(p: any): ProductCardData {
     ratingCount: p.ratingCount || 0,
     soldCount: p.soldCount || 0,
     organization: orgSummary(p.organization),
+    category: p.category?.name ?? null,
+    tags: parseArr(p.tags),
+    material: p.material ?? null,
   };
 }
 
@@ -89,9 +92,9 @@ export async function getDiscoverProducts(filters: DiscoverFilters = {}): Promis
   const products = await db.product.findMany({
     where,
     orderBy,
-    take: 60,
     include: {
       images: { orderBy: { position: 'asc' }, take: 1 },
+      category: { select: { name: true } },
       organization: {
         select: {
           id: true, name: true, slug: true, logo: true, banner: true,

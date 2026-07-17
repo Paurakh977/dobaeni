@@ -12,6 +12,10 @@ type Props = {
   previewClass?: string;
 };
 
+// Module-level cache so object URLs survive component remounts (the onboarding
+// steps unmount on every step change) and keep showing the just-uploaded image.
+const objectUrlCache = new Map<string, string>();
+
 export default function ImageUpload({
   value,
   onChange,
@@ -39,11 +43,16 @@ export default function ImageUpload({
     try {
       const uploaded: string[] = [];
       for (const file of list) {
+        const preview = URL.createObjectURL(file);
         const fd = new FormData();
         fd.append('file', file);
         const res = await fetch('/api/upload', { method: 'POST', body: fd });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        if (!res.ok) {
+          URL.revokeObjectURL(preview);
+          throw new Error(data.error || 'Upload failed');
+        }
+        objectUrlCache.set(data.url, preview);
         uploaded.push(data.url);
       }
       if (multiple) onChange([...urls, ...uploaded]);
@@ -57,8 +66,16 @@ export default function ImageUpload({
   }
 
   function remove(idx: number) {
-    if (multiple) onChange(urls.filter((_, i) => i !== idx));
-    else onChange('');
+    if (multiple) {
+      const next = urls.filter((_, i) => i !== idx);
+      onChange(next);
+    } else {
+      onChange('');
+    }
+  }
+
+  function previewSrc(u: string): string {
+    return objectUrlCache.get(u) ?? u;
   }
 
   return (
@@ -77,7 +94,7 @@ export default function ImageUpload({
             key={`${u}-${i}`}
             className={`relative ${previewClass} overflow-hidden rounded-xl border border-white/[0.08]`}
           >
-            <SafeImage src={u} alt="" className="h-full w-full object-cover" />
+            <SafeImage src={previewSrc(u)} alt="" className="h-full w-full object-cover" />
             <button
               type="button"
               onClick={() => remove(i)}

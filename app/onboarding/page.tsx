@@ -36,7 +36,7 @@ export default function OnboardingPage() {
 
   // Buyer state
   const [avatar, setAvatar] = useState('');
-  const [gender, setGender] = useState('');
+  const [shopFor, setShopFor] = useState<string[]>([]);
   const [ageRange, setAgeRange] = useState('');
   const [city, setCity] = useState('');
   const [bio, setBio] = useState('');
@@ -89,7 +89,7 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           avatarUrl: avatar || null,
-          gender: gender || null,
+          preferredGenders: shopFor.length ? shopFor : null,
           ageRange: ageRange || null,
           city: city || null,
           bio: bio || null,
@@ -154,7 +154,7 @@ export default function OnboardingPage() {
     role === 'buyer'
       ? step < 3
         ? true
-        : categories.length > 0 && gender && ageRange && budget && intensity
+        : categories.length > 0 && shopFor.length > 0 && ageRange && budget && intensity
       : step < 3
         ? storeName && logo
         : true;
@@ -208,8 +208,8 @@ export default function OnboardingPage() {
               firstName={session.user.name?.split(' ')[0] || 'there'}
               avatar={avatar}
               setAvatar={setAvatar}
-              gender={gender}
-              setGender={setGender}
+              shopFor={shopFor}
+              setShopFor={setShopFor}
               ageRange={ageRange}
               setAgeRange={setAgeRange}
               city={city}
@@ -322,19 +322,14 @@ function Pill({
       type="button"
       onClick={onClick}
       data-cursor="hover"
+      aria-pressed={active}
       className={`relative overflow-hidden rounded-full border px-5 py-2.5 text-[12px] font-mono uppercase tracking-wider transition-all duration-300 ${
         active
           ? 'border-[#DFBA73] text-[#08080a]'
           : 'border-white/[0.08] bg-white/[0.02] text-[#FAF9F6] hover:border-white/[0.2]'
       }`}
     >
-      {active && (
-        <motion.span
-          layoutId="onbPill"
-          className="absolute inset-0 bg-[#DFBA73]"
-          transition={{ type: 'spring', stiffness: 300, damping: 25 }}
-        />
-      )}
+      {active && <span className="absolute inset-0 bg-[#DFBA73]" />}
       <span className="relative z-10 flex items-center gap-2">
         {active && <Check size={12} strokeWidth={3} />}
         {children}
@@ -356,7 +351,7 @@ function StepTitle({ title, sub }: { title: string; sub: string }) {
 
 function BuyerSteps(props: any) {
   const {
-    step, firstName, avatar, setAvatar, gender, setGender, ageRange, setAgeRange,
+    step, firstName, avatar, setAvatar, shopFor, setShopFor, ageRange, setAgeRange,
     city, setCity, bio, setBio, categories, occasions, setCategories, setOccasions,
     budget, setBudget, intensity, setIntensity,
   } = props;
@@ -392,7 +387,11 @@ function BuyerSteps(props: any) {
             <Field label="I shop for">
               <div className="flex flex-wrap gap-3">
                 {GENDER_OPTIONS.map((g) => (
-                  <Pill key={g.value} active={gender === g.value} onClick={() => setGender(g.value)}>
+                  <Pill
+                    key={g.value}
+                    active={shopFor.includes(g.value)}
+                    onClick={() => toggleMulti(shopFor, setShopFor, g.value)}
+                  >
                     {g.label}
                   </Pill>
                 ))}

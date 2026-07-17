@@ -27,6 +27,88 @@ const clamp = (v: number, min: number, max: number) =>
 
 const DIAGONAL_STEP = 38;
 
+// ---- ELASTIC / FUZZY SEARCH HELPERS ----
+// Strip everything but alphanumerics + lowercase so "Old Money", "old money"
+// and "oldmoney" all collapse to the same token and match each other.
+function normalizeSearch(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+// Tiny Levenshtein for typo tolerance (e.g. "old mney" → "old money").
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  const prev = new Array(n + 1);
+  const curr = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  for (let i = 1; i <= m; i++) {
+    curr[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      curr[j] = Math.min(
+        prev[j] + 1,
+        curr[j - 1] + 1,
+        prev[j - 1] + cost,
+      );
+    }
+    for (let j = 0; j <= n; j++) prev[j] = curr[j];
+  }
+  return prev[n];
+}
+
+// Score a single product against a query. Returns 0 when there is no match.
+function scoreProduct(
+  p: ProductCardData,
+  query: string,
+): number {
+  const qNorm = normalizeSearch(query);
+  if (!qNorm) return 0;
+  const qTokens = query.toLowerCase().match(/[a-z0-9]+/g) || [qNorm];
+
+  const fields: { text: string; weight: number }[] = [
+    { text: p.name, weight: 3 },
+    { text: p.organization.name, weight: 2 },
+    { text: p.category ?? '', weight: 2 },
+    { text: (p.styleKeywords || []).join(' '), weight: 3 },
+    { text: (p.tags || []).join(' '), weight: 1 },
+    { text: p.material ?? '', weight: 1 },
+  ];
+
+  let score = 0;
+  for (const f of fields) {
+    const fNorm = normalizeSearch(f.text);
+    if (!fNorm) continue;
+
+    // Full normalized substring match (handles spaces / punctuation gaps).
+    if (fNorm.includes(qNorm)) {
+      score += f.weight * (1 + Math.min(1, qNorm.length / fNorm.length));
+    }
+
+    // Token overlap + fuzzy prefix/typo tolerance (handles multi-word & typos).
+    const fTokens: string[] = fNorm.match(/[a-z0-9]+/g) || [];
+    let hits = 0;
+    for (const t of qTokens) {
+      if (!t) continue;
+      if (fTokens.includes(t)) {
+        hits++;
+      } else if (
+        fTokens.some(
+          (ft) =>
+            ft.startsWith(t) ||
+            t.startsWith(ft) ||
+            (ft.length >= 4 && levenshtein(ft, t) <= 1),
+        )
+      ) {
+        hits += 0.6;
+      }
+    }
+    if (hits > 0) score += f.weight * 0.4 * (hits / qTokens.length);
+  }
+  return score;
+}
+
 const SORTS = [
   { value: 'newest', label: 'Newest' },
   { value: 'popular', label: 'Most loved' },
@@ -83,30 +165,33 @@ export default function DiscoverView({
 
   // ---- FILTERED / SORTED ITEMS ----
   const items: DiscoverItem[] = useMemo(() => {
-    let list = products.filter((p) => p.images && p.images.length > 0);
-    const query = q.trim().toLowerCase();
-    if (query) {
-      list = list.filter(
-        (p) =>
-          p.name.toLowerCase().includes(query) ||
-          p.organization.name.toLowerCase().includes(query) ||
-          p.styleKeywords.some((k) => k.toLowerCase().includes(query)),
-      );
-    }
+    const query = q.trim();
+    let scored = products
+      .filter((p) => p.images && p.images.length > 0)
+      .map((p) => ({ p, score: query ? scoreProduct(p, query) : 1 }));
+
+    // Drop non-matches when a search query is active.
+    if (query) scored = scored.filter((s) => s.score > 0);
+
+    // Aesthetic chip filter stays an exact match.
     if (aesthetic) {
-      list = list.filter((p) =>
-        p.styleKeywords.some(
+      scored = scored.filter((s) =>
+        s.p.styleKeywords.some(
           (k) => k.toLowerCase() === aesthetic.toLowerCase(),
         ),
       );
     }
-    const sorted = [...list];
-    if (sort === 'price-asc') sorted.sort((a, b) => a.price - b.price);
-    else if (sort === 'price-desc') sorted.sort((a, b) => b.price - a.price);
-    else if (sort === 'popular')
-      sorted.sort((a, b) => b.soldCount - a.soldCount);
 
-    return sorted.map((p) => ({
+    scored.sort((a, b) => {
+      // When searching, rank by relevance first, then the chosen sort.
+      if (query && b.score !== a.score) return b.score - a.score;
+      if (sort === 'price-asc') return a.p.price - b.p.price;
+      if (sort === 'price-desc') return b.p.price - a.p.price;
+      if (sort === 'popular') return b.p.soldCount - a.p.soldCount;
+      return 0;
+    });
+
+    return scored.map(({ p }) => ({
       id: p.id,
       title: p.name,
       category: p.organization.name,
@@ -290,7 +375,7 @@ export default function DiscoverView({
                   <input
                     value={q}
                     onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search products, brands…"
+                    placeholder="Search products, brands, styles…"
                     className="w-full rounded-full border border-white/[0.06] bg-white/[0.03] py-2 pl-10 pr-8 text-[12px] text-[#FAF9F6] outline-none transition-all placeholder:text-[#52525B] focus:border-[#DFBA73]/30"
                   />
                   {q && (

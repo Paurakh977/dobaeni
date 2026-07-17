@@ -27,6 +27,9 @@ export type ProductCardData = {
   ratingCount: number;
   soldCount: number;
   organization: OrgSummary;
+  category: string | null;
+  tags: string[];
+  material: string | null;
 };
 
 export type BoardSummary = {
