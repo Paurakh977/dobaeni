@@ -24,6 +24,15 @@ const KEYWORDS = [
   'earrings', 'watch', 'belt', 'beanie', 'poncho', 'shawl', 'kurti', 'saree',
 ];
 
+// Every fallback tag pair always includes "fashion", so no candidate URL can
+// ever resolve to an unrelated topic, no matter which one succeeds.
+const FALLBACK_TAGS = [
+  'fashion,clothing',
+  'fashion,model',
+  'fashion,style',
+  'fashion,runway',
+];
+
 const outDir = join(process.cwd(), 'public', 'seed');
 await mkdir(outDir, { recursive: true });
 
@@ -51,11 +60,21 @@ async function downloadOne(index: number): Promise<boolean> {
   const file = join(outDir, nameFor(index));
   const keyword = KEYWORDS[index % KEYWORDS.length];
   const lock = index + 1;
+
+  // Every candidate is a loremflickr URL that always carries the "fashion"
+  // tag alongside a specific keyword. Ambiguous keywords like "suit",
+  // "boots", or "watch" can match non-fashion photos on their own — pairing
+  // them with "fashion" keeps every candidate on-topic. The old
+  // picsum.photos fallback (no keyword/tag filtering at all) has been
+  // removed since it was the source of the unrelated images.
   const candidates = [
-    `https://loremflickr.com/${WIDTH}/${HEIGHT}/${keyword}?lock=${lock}`,
-    `https://loremflickr.com/${WIDTH}/${HEIGHT}/fashion,clothing?lock=${lock + 5000}`,
-    `https://picsum.photos/seed/dobaeni${lock}/${WIDTH}/${HEIGHT}`,
+    `https://loremflickr.com/${WIDTH}/${HEIGHT}/fashion,${keyword}?lock=${lock}`,
+    ...FALLBACK_TAGS.map(
+      (tags, i) =>
+        `https://loremflickr.com/${WIDTH}/${HEIGHT}/${tags}?lock=${lock + (i + 1) * 5000}`
+    ),
   ];
+
   for (const url of candidates) {
     try {
       const res = await fetchWithTimeout(url);
