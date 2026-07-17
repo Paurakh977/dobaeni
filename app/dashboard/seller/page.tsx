@@ -32,7 +32,7 @@ export default async function SellerPage() {
     );
   }
 
-  const [stats, products, orders, promotions] = await Promise.all([
+  const [stats, products, orders, rawPromotions] = await Promise.all([
     getSellerStats(org.id),
     getSellerProducts(org.id),
     getSellerOrders(org.id),
@@ -43,10 +43,23 @@ export default async function SellerPage() {
     }),
   ]);
 
+  // Serialize Date fields so they match the client component's plain types.
+  const promotions = rawPromotions.map((p) => ({
+    id: p.id,
+    title: p.title,
+    type: p.type,
+    status: p.status,
+    budget: p.budget,
+    startDate: p.startDate ? p.startDate.toISOString() : null,
+    endDate: p.endDate ? p.endDate.toISOString() : null,
+  }));
+
   return (
     <PageShell>
       <SellerDashboard
         orgName={org.name}
+        analyticsLocked={org.analyticsLocked}
+        suspended={org.status === 'suspended'}
         stats={stats}
         products={products}
         orders={orders}

@@ -102,7 +102,7 @@ export default function OnboardingPage() {
       await authClient.updateUser({
         interests: JSON.stringify(categories),
         onboardingCompleted: true,
-      });
+      } as never);
       router.push('/dashboard');
     } catch (err) {
       console.error(err);
@@ -140,7 +140,7 @@ export default function OnboardingPage() {
         }),
       });
 
-      await authClient.updateUser({ onboardingCompleted: true });
+      await authClient.updateUser({ onboardingCompleted: true } as never);
       router.push('/dashboard');
     } catch (err) {
       console.error(err);

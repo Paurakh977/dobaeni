@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, ShoppingBag, Megaphone, Plus, Loader2,
-  Pencil, Trash2, X, Check, Eye, EyeOff,
+  Pencil, Trash2, X, Check, Eye, EyeOff, Lock,
 } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import ImageUpload from '@/app/components/ImageUpload';
@@ -16,7 +16,7 @@ type Promotion = {
   id: string;
   title: string;
   type: string;
-  status: string;
+  status: string | null;
   budget: number | null;
   startDate: string | null;
   endDate: string | null;
@@ -33,12 +33,16 @@ const ORDER_STATUSES = ['pending', 'processing', 'packed', 'out_for_delivery', '
 
 export default function SellerDashboard({
   orgName,
+  analyticsLocked,
+  suspended,
   stats,
   products,
   orders,
   promotions,
 }: {
   orgName: string;
+  analyticsLocked: boolean;
+  suspended: boolean;
   stats: SellerStats;
   products: SellerProductView[];
   orders: OrderView[];
@@ -69,6 +73,32 @@ export default function SellerDashboard({
         </div>
       </header>
 
+      {suspended && (
+        <div className="mb-8 flex items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/[0.08] px-5 py-4">
+          <Lock size={18} className="mt-0.5 shrink-0 text-red-400" />
+          <div>
+            <p className="text-[13px] font-medium text-red-200">Brand suspended by Dobaeni</p>
+            <p className="mt-1 text-[12px] text-red-200/70">
+              Your brand has been suspended. Your storefront is hidden from customers and all sales are paused.
+              Contact support for more information.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {analyticsLocked && (
+        <div className="mb-8 flex items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/[0.06] px-5 py-4">
+          <Lock size={18} className="mt-0.5 shrink-0 text-amber-400" />
+          <div>
+            <p className="text-[13px] font-medium text-amber-200">Analytics locked by Dobaeni</p>
+            <p className="mt-1 text-[12px] text-amber-200/70">
+              A platform administrator has temporarily hidden your brand's performance metrics. Your storefront and
+              products are unaffected. Contact support if you believe this is a mistake.
+            </p>
+          </div>
+        </div>
+      )}
+
       <AnimatePresence mode="wait">
         <motion.div
           key={tab}
@@ -77,10 +107,10 @@ export default function SellerDashboard({
           exit={{ opacity: 0, y: -12 }}
           transition={{ duration: 0.25 }}
         >
-          {tab === 'overview' && <Overview stats={stats} orders={orders} />}
-          {tab === 'products' && <Products products={products} />}
-          {tab === 'orders' && <Orders orders={orders} />}
-          {tab === 'promotions' && <Promotions promotions={promotions} />}
+          {tab === 'overview' && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} />}
+          {tab === 'products' && <Products suspended={suspended} products={products} />}
+          {tab === 'orders' && <Orders suspended={suspended} orders={orders} />}
+          {tab === 'promotions' && <Promotions suspended={suspended} promotions={promotions} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -99,36 +129,49 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
   );
 }
 
-function Overview({ stats, orders }: { stats: SellerStats; orders: OrderView[] }) {
+function Overview({ analyticsLocked, stats, orders }: { analyticsLocked: boolean; stats: SellerStats; orders: OrderView[] }) {
   return (
     <div>
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <StatCard label="Revenue" value={formatPrice(stats.revenue)} />
-        <StatCard label="Orders" value={formatNumber(stats.orders)} sub={`${stats.pendingOrders} pending`} />
-        <StatCard label="Products" value={formatNumber(stats.products)} />
-        <StatCard label="Followers" value={formatNumber(stats.followers)} />
-        <StatCard label="Profile views" value={formatNumber(stats.views)} />
-        <StatCard label="Avg rating" value={stats.avgRating.toFixed(1)} />
-        <StatCard label="Units sold" value={formatNumber(orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0))} />
-        <StatCard label="Conversion" value={stats.views ? `${((stats.orders / stats.views) * 100).toFixed(1)}%` : '0%'} />
-      </div>
-
-      <h2 className="mt-10 mb-4 text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">Recent orders</h2>
-      {orders.length === 0 ? (
-        <p className="rounded-2xl border border-white/[0.06] bg-white/[0.01] px-5 py-8 text-center text-[13px] text-[#52525B]">
-          No orders yet.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          {orders.slice(0, 5).map((o) => (
-            <div key={o.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.01] px-4 py-3 text-[13px]">
-              <span className="font-mono text-[#8E8E93]">{o.orderNumber}</span>
-              <span className="text-[#FAF9F6]">{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
-              <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
-              <span className="text-[11px] uppercase tracking-wider text-[#7C7C83]">{o.status.replace('_', ' ')}</span>
-            </div>
-          ))}
+      {analyticsLocked ? (
+        <div className="flex flex-col items-center justify-center rounded-3xl border border-amber-500/20 bg-amber-500/[0.04] py-20 text-center">
+          <Lock size={32} className="text-amber-400/60" />
+          <p className="mt-4 text-[15px] text-amber-200/80">Analytics are hidden</p>
+          <p className="mt-1 max-w-sm text-[13px] text-amber-200/50">
+            A platform administrator has locked your brand's analytics. Contact support if you believe this is a
+            mistake.
+          </p>
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatCard label="Revenue" value={formatPrice(stats.revenue)} />
+            <StatCard label="Orders" value={formatNumber(stats.orders)} sub={`${stats.pendingOrders} pending`} />
+            <StatCard label="Products" value={formatNumber(stats.products)} />
+            <StatCard label="Followers" value={formatNumber(stats.followers)} />
+            <StatCard label="Profile views" value={formatNumber(stats.views)} />
+            <StatCard label="Avg rating" value={stats.avgRating.toFixed(1)} />
+            <StatCard label="Units sold" value={formatNumber(orders.reduce((s, o) => s + o.items.reduce((a, i) => a + i.quantity, 0), 0))} />
+            <StatCard label="Conversion" value={stats.views ? `${((stats.orders / stats.views) * 100).toFixed(1)}%` : '0%'} />
+          </div>
+
+          <h2 className="mt-10 mb-4 text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">Recent orders</h2>
+          {orders.length === 0 ? (
+            <p className="rounded-2xl border border-white/[0.06] bg-white/[0.01] px-5 py-8 text-center text-[13px] text-[#52525B]">
+              No orders yet.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {orders.slice(0, 5).map((o) => (
+                <div key={o.id} className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.01] px-4 py-3 text-[13px]">
+                  <span className="font-mono text-[#8E8E93]">{o.orderNumber}</span>
+                  <span className="text-[#FAF9F6]">{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
+                  <span className="text-[#DFBA73]">{formatPrice(o.totalAmount, o.currency)}</span>
+                  <span className="text-[11px] uppercase tracking-wider text-[#7C7C83]">{o.status.replace('_', ' ')}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -136,7 +179,7 @@ function Overview({ stats, orders }: { stats: SellerStats; orders: OrderView[] }
 
 // ── Products ───────────────────────────────────────────────────────────
 
-function Products({ products }: { products: SellerProductView[] }) {
+function Products({ suspended, products }: { suspended: boolean; products: SellerProductView[] }) {
   const router = useRouter();
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<SellerProductView | null>(null);
@@ -158,13 +201,15 @@ function Products({ products }: { products: SellerProductView[] }) {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <p className="text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">{products.length} products</p>
-        <button
-          onClick={openCreate}
-          data-cursor="hover"
-          className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]"
-        >
-          <Plus size={15} /> Add product
-        </button>
+        {!suspended && (
+          <button
+            onClick={openCreate}
+            data-cursor="hover"
+            className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]"
+          >
+            <Plus size={15} /> Add product
+          </button>
+        )}
       </div>
 
       {products.length === 0 ? (
@@ -189,10 +234,10 @@ function Products({ products }: { products: SellerProductView[] }) {
                 {p.isPublished ? 'Live' : 'Draft'}
               </span>
               <div className="flex items-center gap-1">
-                <button onClick={() => openEdit(p)} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-[#DFBA73]" aria-label="Edit">
+                <button onClick={() => openEdit(p)} disabled={suspended} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-[#DFBA73] disabled:opacity-30 disabled:pointer-events-none" aria-label="Edit">
                   <Pencil size={15} />
                 </button>
-                <DeleteProduct id={p.id} onDone={() => router.refresh()} />
+                <DeleteProduct id={p.id} disabled={suspended} onDone={() => router.refresh()} />
               </div>
             </div>
           ))}
@@ -202,7 +247,7 @@ function Products({ products }: { products: SellerProductView[] }) {
   );
 }
 
-function DeleteProduct({ id, onDone }: { id: string; onDone: () => void }) {
+function DeleteProduct({ id, disabled, onDone }: { id: string; disabled?: boolean; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   async function del() {
     if (!confirm('Delete this product?')) return;
@@ -215,7 +260,7 @@ function DeleteProduct({ id, onDone }: { id: string; onDone: () => void }) {
     }
   }
   return (
-    <button onClick={del} disabled={busy} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-red-400 disabled:opacity-40" aria-label="Delete">
+    <button onClick={del} disabled={busy || disabled} data-cursor="hover" className="rounded-lg p-2 text-[#8E8E93] transition-colors hover:text-red-400 disabled:opacity-40" aria-label="Delete">
       {busy ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
     </button>
   );
@@ -354,7 +399,7 @@ function ProductForm({ product, onClose }: { product: SellerProductView | null; 
 
 // ── Orders ──────────────────────────────────────────────────────────────
 
-function Orders({ orders }: { orders: OrderView[] }) {
+function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[] }) {
   const [list, setList] = useState(orders);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -392,9 +437,9 @@ function Orders({ orders }: { orders: OrderView[] }) {
               {busyId === o.id && <Loader2 size={14} className="animate-spin text-[#DFBA73]" />}
               <select
                 value={o.status}
-                disabled={busyId === o.id}
+                disabled={busyId === o.id || suspended}
                 onChange={(e) => update(o.id, e.target.value)}
-                className="rounded-xl border border-white/[0.08] bg-[#0E0E12] px-3 py-2 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40"
+                className="rounded-xl border border-white/[0.08] bg-[#0E0E12] px-3 py-2 text-[12px] text-[#FAF9F6] outline-none focus:border-[#DFBA73]/40 disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {ORDER_STATUSES.map((s) => (
                   <option key={s} value={s} className="bg-[#121215]">{s.replace('_', ' ')}</option>
@@ -426,7 +471,7 @@ function Orders({ orders }: { orders: OrderView[] }) {
 
 // ── Promotions ──────────────────────────────────────────────────────────
 
-function Promotions({ promotions }: { promotions: Promotion[] }) {
+function Promotions({ suspended, promotions }: { suspended: boolean; promotions: Promotion[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -462,9 +507,11 @@ function Promotions({ promotions }: { promotions: Promotion[] }) {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <p className="text-[13px] font-mono uppercase tracking-widest text-[#7C7C83]">{promotions.length} campaigns</p>
-        <button onClick={() => setOpen((v) => !v)} data-cursor="hover" className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]">
-          <Plus size={15} /> New campaign
-        </button>
+        {!suspended && (
+          <button onClick={() => setOpen((v) => !v)} data-cursor="hover" className="flex items-center gap-2 rounded-2xl bg-[#DFBA73] px-5 py-3 text-[11px] font-mono font-bold uppercase tracking-[0.2em] text-[#08080a] transition-all hover:bg-[#F0E2C3]">
+            <Plus size={15} /> New campaign
+          </button>
+        )}
       </div>
 
       <AnimatePresence>

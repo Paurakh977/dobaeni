@@ -5,22 +5,38 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSession, signOut } from "@/lib/auth-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { LogOut, LayoutDashboard, Heart, Settings, ChevronDown } from "lucide-react";
+import { LogOut, LayoutDashboard, Heart, Settings, ChevronDown, Shield, UserCog } from "lucide-react";
 import Magnetic from "./Magnetic";
 import CartBadge from "./components/CartBadge";
 
-const LINKS: { label: string; href: string }[] = [
-  { label: "Discover", href: "/discover" },
-  { label: "Boards", href: "/dashboard/boards" },
-  { label: "Brands", href: "/brands" },
-  { label: "Access", href: "#" },
-];
+  const LINKS: { label: string; href: string }[] = [
+    { label: "Discover", href: "/discover" },
+    { label: "Boards", href: "/dashboard/boards" },
+    { label: "Brands", href: "/brands" },
+    { label: "Access", href: "#" },
+  ];
 
 export default function Navbar() {
   const { data: session, isPending } = useSession();
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
+  const isAdmin = session?.user?.role === "admin" || session?.user?.role === "moderator";
+  const impersonated = Boolean((session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy);
+
   return (
+    <>
+      {impersonated && (
+        <div className="relative z-[60] flex items-center justify-center gap-2 bg-[#DFBA73] px-4 py-1.5 text-[11px] font-mono uppercase tracking-[0.2em] text-[#08080a]">
+          <UserCog size={13} />
+          Impersonating {session?.user?.email}
+          <button
+            onClick={() => signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/admin/users"; } } })}
+            className="ml-2 rounded-full bg-[#08080a]/15 px-2 py-0.5 font-bold uppercase tracking-wider hover:bg-[#08080a]/25"
+          >
+            Stop
+          </button>
+        </div>
+      )}
     <nav className="relative z-50 flex items-center justify-between px-6 md:px-12 pt-8 bg-transparent">
       <Magnetic>
         <Link href="/">
@@ -57,6 +73,18 @@ export default function Navbar() {
             </Link>
           </Magnetic>
         ))}
+        {isAdmin && (
+          <Magnetic>
+            <Link
+              href="/admin"
+              data-cursor="hover"
+              className="relative group flex items-center gap-1.5 py-1 text-[#DFBA73]/80 hover:text-[#DFBA73] transition-colors"
+            >
+              <Shield size={13} /> Admin
+              <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-[#DFBA73] transition-all duration-300 group-hover:w-full" />
+            </Link>
+          </Magnetic>
+        )}
       </div>
 
       <div className="flex items-center gap-4">
@@ -117,6 +145,12 @@ export default function Navbar() {
                       <Settings className="w-4 h-4" />
                       Settings
                     </Link>
+                    {isAdmin && (
+                      <Link href="/admin" className="flex items-center gap-3 px-3 py-2 rounded-xl text-[12px] font-light text-[#DFBA73]/90 hover:text-[#DFBA73] hover:bg-white/[0.04] transition-colors">
+                        <Shield className="w-4 h-4" />
+                        Admin Console
+                      </Link>
+                    )}
                   </div>
 
                   <div className="mt-2 pt-2 border-t border-white/[0.08]">
@@ -146,5 +180,6 @@ export default function Navbar() {
       </div>
       </div>
     </nav>
+    </>
   );
 }

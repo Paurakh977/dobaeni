@@ -161,7 +161,7 @@ export default function LoginSignupForm() {
           name: formData.username || formData.email.split('@')[0],
           username: usernameHandle,
           role: formData.role, // custom field
-        });
+        } as never);
         if (error) throw new Error(error.message);
 
         setMessage({
