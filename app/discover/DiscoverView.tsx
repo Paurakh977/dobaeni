@@ -21,6 +21,9 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import type { ProductCardData } from '@/lib/types';
+import LikeButton from '@/app/components/LikeButton';
+import { MessageCircle } from 'lucide-react';
+import { BUSINESS_TYPES, GENDER_OPTIONS } from '@/lib/format';
 
 const clamp = (v: number, min: number, max: number) =>
   Math.min(max, Math.max(min, v));
@@ -72,8 +75,12 @@ function scoreProduct(
     { text: p.organization.name, weight: 2 },
     { text: p.category ?? '', weight: 2 },
     { text: (p.styleKeywords || []).join(' '), weight: 3 },
+    { text: (p.occasion || []).join(' '), weight: 2 },
     { text: (p.tags || []).join(' '), weight: 1 },
     { text: p.material ?? '', weight: 1 },
+    { text: p.gender ?? '', weight: 2 },
+    { text: p.organization.businessType ?? '', weight: 2 },
+    { text: p.organization.city ?? '', weight: 1 },
   ];
 
   let score = 0;
@@ -110,11 +117,61 @@ function scoreProduct(
 }
 
 const SORTS = [
+  { value: 'trending', label: 'Trending' },
   { value: 'newest', label: 'Newest' },
   { value: 'popular', label: 'Most loved' },
   { value: 'price-asc', label: 'Price: Low → High' },
   { value: 'price-desc', label: 'Price: High → Low' },
 ];
+
+const RATING_FILTERS = [
+  { value: 4.5, label: '4.5★ & up' },
+  { value: 4, label: '4.0★ & up' },
+  { value: 3, label: '3.0★ & up' },
+];
+
+// Trend score blends sales momentum, social love, proven quality and reach.
+function trendScore(p: ProductCardData): number {
+  return (
+    (p.soldCount || 0) * 1 +
+    (p.likeCount || 0) * 1.5 +
+    (p.ratingAvg || 0) * (p.ratingCount || 0) * 2 +
+    (p.viewCount || 0) * 0.1 +
+    (p.isFeatured ? 15 : 0)
+  );
+}
+
+// Shared chip used inside the filter drawer.
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`shrink-0 rounded-full border px-3 py-1 text-[10px] font-mono uppercase tracking-wider transition-all ${
+        active
+          ? 'border-[#DFBA73] bg-[#DFBA73] text-[#08080a]'
+          : 'border-white/[0.06] text-[#8E8E93] hover:text-[#FAF9F6]'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2 text-[10px] font-mono uppercase tracking-[0.2em] text-[#7C7C83]">
+      {children}
+    </p>
+  );
+}
 
 type DiscoverItem = {
   id: string;
@@ -122,6 +179,9 @@ type DiscoverItem = {
   category: string;
   src: string;
   slug: string | null;
+  likeCount: number;
+  commentCount: number;
+  liked: boolean;
 };
 
 export default function DiscoverView({
@@ -138,8 +198,30 @@ export default function DiscoverView({
 
   // ---- DISCOVER FILTER STATE ----
   const [q, setQ] = useState('');
-  const [sort, setSort] = useState('newest');
+  const [sort, setSort] = useState('trending');
   const [aesthetic, setAesthetic] = useState<string | null>(null);
+  const [genders, setGenders] = useState<string[]>([]);
+  const [businessTypes, setBusinessTypes] = useState<string[]>([]);
+  const [minRating, setMinRating] = useState<number | null>(null);
+  const [verifiedOnly, setVerifiedOnly] = useState(false);
+
+  // ---- FILTER DRAWER ----
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const activeFilterCount =
+    (aesthetic ? 1 : 0) +
+    genders.length +
+    businessTypes.length +
+    (minRating != null ? 1 : 0) +
+    (verifiedOnly ? 1 : 0);
+
+  const clearAll = () => {
+    setQ('');
+    setAesthetic(null);
+    setGenders([]);
+    setBusinessTypes([]);
+    setMinRating(null);
+    setVerifiedOnly(false);
+  };
 
   // ---- VIEWPORT (reactive state, not a ref — so constraints re-render) ----
   const [viewportSize, setViewportSize] = useState({ width: 1200, height: 800 });
@@ -182,12 +264,39 @@ export default function DiscoverView({
       );
     }
 
+    // Shop-for / gender.
+    if (genders.length > 0) {
+      scored = scored.filter(
+        (s) => s.p.gender != null && genders.includes(s.p.gender),
+      );
+    }
+
+    // Brand business type.
+    if (businessTypes.length > 0) {
+      scored = scored.filter(
+        (s) =>
+          s.p.organization.businessType != null &&
+          businessTypes.includes(s.p.organization.businessType),
+      );
+    }
+
+    // Minimum rating.
+    if (minRating != null) {
+      scored = scored.filter((s) => (s.p.ratingAvg || 0) >= minRating);
+    }
+
+    // Verified brands only.
+    if (verifiedOnly) {
+      scored = scored.filter((s) => s.p.organization.isVerified);
+    }
+
     scored.sort((a, b) => {
       // When searching, rank by relevance first, then the chosen sort.
       if (query && b.score !== a.score) return b.score - a.score;
+      if (sort === 'trending') return trendScore(b.p) - trendScore(a.p);
       if (sort === 'price-asc') return a.p.price - b.p.price;
       if (sort === 'price-desc') return b.p.price - a.p.price;
-      if (sort === 'popular') return b.p.soldCount - a.p.soldCount;
+      if (sort === 'popular') return (b.p.likeCount || 0) - (a.p.likeCount || 0);
       return 0;
     });
 
@@ -197,8 +306,20 @@ export default function DiscoverView({
       category: p.organization.name,
       src: p.images[0],
       slug: p.slug,
+      likeCount: p.likeCount,
+      commentCount: p.commentCount,
+      liked: p.liked ?? false,
     }));
-  }, [products, q, sort, aesthetic]);
+  }, [
+    products,
+    q,
+    sort,
+    aesthetic,
+    genders,
+    businessTypes,
+    minRating,
+    verifiedOnly,
+  ]);
 
   // ---- GRID DIMENSIONS ----
   const columns = 10;
@@ -389,7 +510,6 @@ export default function DiscoverView({
                   )}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  <SlidersHorizontal size={13} className="text-[#52525B]" />
                   <select
                     value={sort}
                     onChange={(e) => setSort(e.target.value)}
@@ -406,39 +526,165 @@ export default function DiscoverView({
                     ))}
                   </select>
                 </div>
+                <button
+                  onClick={() => setFiltersOpen(true)}
+                  className="relative flex shrink-0 items-center gap-1.5 rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-[10px] font-mono uppercase tracking-wider text-[#FAF9F6] outline-none transition-all hover:border-[#DFBA73]/30"
+                >
+                  <SlidersHorizontal size={13} className="text-[#52525B]" />
+                  <span>Filters</span>
+                  {activeFilterCount > 0 && (
+                    <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-[#DFBA73] px-1 text-[9px] font-bold text-[#08080a]">
+                      {activeFilterCount}
+                    </span>
+                  )}
+                </button>
               </div>
-
-              {aesthetics.length > 0 && (
-                <div className="mt-2.5 flex flex-nowrap gap-1.5 overflow-x-auto scrollbar-none">
-                  <button
-                    onClick={() => setAesthetic(null)}
-                    className={`shrink-0 rounded-full border px-3 py-0.5 text-[9px] font-mono uppercase tracking-wider transition-all ${
-                      aesthetic === null
-                        ? 'border-[#DFBA73] bg-[#DFBA73] text-[#08080a]'
-                        : 'border-white/[0.06] text-[#8E8E93] hover:text-[#FAF9F6]'
-                    }`}
-                  >
-                    All
-                  </button>
-                  {aesthetics.map((a) => (
-                    <button
-                      key={a}
-                      onClick={() =>
-                        setAesthetic(aesthetic === a ? null : a)
-                      }
-                      className={`shrink-0 rounded-full border px-3 py-0.5 text-[9px] font-mono uppercase tracking-wider transition-all ${
-                        aesthetic === a
-                          ? 'border-[#DFBA73] bg-[#DFBA73] text-[#08080a]'
-                          : 'border-white/[0.06] text-[#8E8E93] hover:text-[#FAF9F6]'
-                      }`}
-                    >
-                      {a}
-                    </button>
-                  ))}
-                </div>
-              )}
             </div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ─── FILTER DRAWER — slides in on demand so it never overlaps the grid ─── */}
+      <AnimatePresence>
+        {filtersOpen && (
+          <>
+            <motion.div
+              key="filters-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setFiltersOpen(false)}
+              className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div
+              key="filters-drawer"
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 260 }}
+              className="fixed right-0 top-0 z-[60] flex h-full w-[360px] max-w-[88vw] flex-col bg-[#0c0c0e] border-l border-white/10 shadow-2xl"
+            >
+              <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+                <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-[#DFBA73]">
+                  Filters
+                </span>
+                <button
+                  onClick={() => setFiltersOpen(false)}
+                  className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-white transition-all hover:bg-white/15 border border-white/10"
+                  aria-label="Close filters"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="flex-1 space-y-6 overflow-y-auto px-5 py-5">
+                {/* Aesthetic */}
+                {aesthetics.length > 0 && (
+                  <div>
+                    <SectionLabel>Aesthetic</SectionLabel>
+                    <div className="flex flex-wrap gap-1.5">
+                      <FilterChip
+                        label="All"
+                        active={aesthetic === null}
+                        onClick={() => setAesthetic(null)}
+                      />
+                      {aesthetics.map((a) => (
+                        <FilterChip
+                          key={a}
+                          label={a}
+                          active={aesthetic === a}
+                          onClick={() =>
+                            setAesthetic(aesthetic === a ? null : a)
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Shop for */}
+                <div>
+                  <SectionLabel>Shop for</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5">
+                    {GENDER_OPTIONS.map((g) => (
+                      <FilterChip
+                        key={g.value}
+                        label={g.label}
+                        active={genders.includes(g.value)}
+                        onClick={() =>
+                          setGenders((prev) =>
+                            prev.includes(g.value)
+                              ? prev.filter((v) => v !== g.value)
+                              : [...prev, g.value],
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* Brand type + verified */}
+                <div>
+                  <SectionLabel>Brand type</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5">
+                    {BUSINESS_TYPES.map((b) => (
+                      <FilterChip
+                        key={b}
+                        label={b}
+                        active={businessTypes.includes(b)}
+                        onClick={() =>
+                          setBusinessTypes((prev) =>
+                            prev.includes(b)
+                              ? prev.filter((v) => v !== b)
+                              : [...prev, b],
+                          )
+                        }
+                      />
+                    ))}
+                    <FilterChip
+                      label="Verified"
+                      active={verifiedOnly}
+                      onClick={() => setVerifiedOnly((v) => !v)}
+                    />
+                  </div>
+                </div>
+
+                {/* Rating */}
+                <div>
+                  <SectionLabel>Rating</SectionLabel>
+                  <div className="flex flex-wrap gap-1.5">
+                    {RATING_FILTERS.map((r) => (
+                      <FilterChip
+                        key={r.value}
+                        label={r.label}
+                        active={minRating === r.value}
+                        onClick={() =>
+                          setMinRating((prev) =>
+                            prev === r.value ? null : r.value,
+                          )
+                        }
+                      />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-4">
+                <button
+                  onClick={clearAll}
+                  className="text-[10px] font-mono uppercase tracking-wider text-[#DFBA73] transition-colors hover:text-[#F0E2C3]"
+                >
+                  Clear all
+                </button>
+                <button
+                  onClick={() => setFiltersOpen(false)}
+                  className="rounded-full bg-[#DFBA73] px-5 py-2 text-[10px] font-mono uppercase tracking-wider text-[#08080a] transition-all hover:bg-[#F0E2C3]"
+                >
+                  Show {items.length} {items.length === 1 ? 'piece' : 'pieces'}
+                </button>
+              </div>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
@@ -530,13 +776,29 @@ export default function DiscoverView({
               </div>
 
               <div className="mt-4 flex items-center justify-between">
-                <div className="flex flex-col gap-0.5">
+                <div className="flex flex-col gap-1.5">
                   <span className="font-mono text-[9px] uppercase tracking-wider text-[#DFBA73]/80">
                     {activeItem.category}
                   </span>
                   <span className="text-sm font-medium text-neutral-200">
                     {activeItem.title}
                   </span>
+                  <div className="flex items-center gap-4 pt-1">
+                    <LikeButton
+                      productId={activeItem.id}
+                      initialLiked={activeItem.liked}
+                      initialCount={activeItem.likeCount}
+                      size={15}
+                    />
+                    <Link
+                      href={`/product/${activeItem.slug}`}
+                      className="flex items-center gap-1.5 text-[#8E8E93] transition-colors hover:text-[#DFBA73]"
+                      data-cursor="hover"
+                    >
+                      <MessageCircle size={15} />
+                      <span>{activeItem.commentCount}</span>
+                    </Link>
+                  </div>
                 </div>
                 <Link
                   href={`/product/${activeItem.slug}`}

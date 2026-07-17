@@ -8,10 +8,10 @@ export const dynamic = 'force-dynamic';
 
 export default async function BrandPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const brand = await getBrandBySlug(slug);
+  const session = await getSession();
+  const brand = await getBrandBySlug(slug, session?.user.id);
   if (!brand) notFound();
 
-  const session = await getSession();
   const follow = session
     ? await getFollowState(session.user.id, brand.id)
     : { isFollowing: false, followerCount: brand.followerCount };

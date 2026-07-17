@@ -19,11 +19,12 @@ function orgSummary(org: any): OrgSummary {
     isVerified: Boolean(org.isVerified),
     tier: org.tier || 'none',
     city: org.city,
+    businessType: org.businessType ?? null,
     followerCount: org.followerCount || 0,
   };
 }
 
-function productCard(p: any): ProductCardData {
+function productCard(p: any, liked?: boolean): ProductCardData {
   const images = (p.images || []).map((i: any) => i.url).filter(Boolean);
   const parseArr = (v: any) => {
     if (!v) return [];
@@ -45,6 +46,13 @@ function productCard(p: any): ProductCardData {
     category: p.category?.name ?? null,
     tags: parseArr(p.tags),
     material: p.material ?? null,
+    gender: p.gender ?? null,
+    occasion: parseArr(p.occasion),
+    viewCount: p.viewCount || 0,
+    isFeatured: Boolean(p.isFeatured),
+    likeCount: p.likeCount || 0,
+    commentCount: p._count?.comments || 0,
+    ...(liked !== undefined ? { liked } : {}),
   };
 }
 
@@ -60,7 +68,7 @@ export type DiscoverFilters = {
   maxPrice?: number;
 };
 
-export async function getDiscoverProducts(filters: DiscoverFilters = {}): Promise<ProductCardData[]> {
+export async function getDiscoverProducts(filters: DiscoverFilters = {}, userId?: string): Promise<ProductCardData[]> {
   const where: any = { isPublished: true, isActive: true, stock: { gt: 0 } };
 
   if (filters.search) {
@@ -101,10 +109,12 @@ export async function getDiscoverProducts(filters: DiscoverFilters = {}): Promis
           isVerified: true, tier: true, city: true, followerCount: true,
         },
       },
+      _count: { select: { comments: true } },
     },
   });
 
-  return products.map(productCard);
+  const cards = products.map((p) => productCard(p));
+  return userId ? await attachLiked(cards, userId) : cards;
 }
 
 // ===========================================================================
@@ -130,9 +140,13 @@ export type ProductDetail = {
   ratingCount: number;
   soldCount: number;
   viewCount: number;
+  likeCount: number;
+  liked: boolean;
+  commentCount: number;
   images: string[];
   organization: OrgSummary & { description: string | null; contactEmail: string | null; businessType: string | null };
   reviews: ReviewData[];
+  comments: CommentData[];
 };
 
 export type ReviewData = {
@@ -148,7 +162,14 @@ export type ReviewData = {
   sellerReply: string | null;
 };
 
-export async function getProductBySlug(slug: string): Promise<ProductDetail | null> {
+export type CommentData = {
+  id: string;
+  content: string;
+  createdAt: string;
+  user: { name: string; image: string | null };
+};
+
+export async function getProductBySlug(slug: string, userId?: string): Promise<ProductDetail | null> {
   const p = await db.product.findFirst({
     where: { slug, isActive: true },
     include: {
@@ -166,6 +187,12 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
         take: 30,
         include: { user: { select: { name: true, image: true } } },
       },
+      comments: {
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: { user: { select: { name: true, image: true } } },
+      },
+      _count: { select: { comments: true } },
     },
   });
   if (!p) return null;
@@ -175,6 +202,10 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
     if (!v) return [];
     try { return JSON.parse(v); } catch { return []; }
   };
+
+  const liked = userId
+    ? Boolean(await db.like.findUnique({ where: { userId_productId: { userId, productId: p.id } } }))
+    : false;
 
   return {
     id: p.id,
@@ -195,6 +226,9 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
     ratingCount: p.ratingCount || 0,
     soldCount: p.soldCount || 0,
     viewCount: p.viewCount || 0,
+    likeCount: p.likeCount || 0,
+    liked,
+    commentCount: p._count?.comments || 0,
     images,
     organization: {
       ...orgSummary(p.organization),
@@ -214,6 +248,12 @@ export async function getProductBySlug(slug: string): Promise<ProductDetail | nu
       user: { name: r.user.name, image: r.user.image },
       sellerReply: r.sellerReply,
     })),
+    comments: p.comments.map((c: any) => ({
+      id: c.id,
+      content: c.content,
+      createdAt: c.createdAt.toISOString(),
+      user: { name: c.user.name, image: c.user.image },
+    })),
   };
 }
 
@@ -225,33 +265,128 @@ export type BrandSummary = OrgSummary & {
   description: string | null;
   businessType: string | null;
   productCount: number;
+  ratingAvg: number;
+  ratingCount: number;
+  viewCount: number;
+  aesthetics: string[];
+  genders: string[];
 };
 
-export async function getBrands(search?: string): Promise<BrandSummary[]> {
+const parseArr = (v: any): string[] => {
+  if (!v) return [];
+  try {
+    const p = JSON.parse(v);
+    return Array.isArray(p) ? p.map((x) => String(x)) : [];
+  } catch {
+    return [];
+  }
+};
+
+// Weighted composite used for the "Trending" brand ranking. Shared with the
+// client so ranking stays consistent when filters are applied there.
+export function brandScore(b: {
+  followerCount: number;
+  ratingAvg: number;
+  ratingCount: number;
+  viewCount: number;
+  productCount: number;
+}): number {
+  return (
+    b.followerCount * 1 +
+    b.ratingAvg * b.ratingCount * 5 +
+    b.viewCount * 0.2 +
+    b.productCount * 2
+  );
+}
+
+export async function getBrands(): Promise<BrandSummary[]> {
   const orgs = await db.organization.findMany({
-    where: {
-      isPublished: true,
-      members: { some: {} },
-      ...(search
-        ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { description: { contains: search, mode: 'insensitive' } }] }
-        : {}),
-    },
+    where: { isPublished: true, members: { some: {} } },
     orderBy: [{ followerCount: 'desc' }, { createdAt: 'desc' }],
-    take: 60,
+    take: 200,
     include: {
       _count: { select: { products: { where: { isPublished: true } } } },
-      products: { where: { isPublished: true }, take: 1, select: { id: true } },
+      products: {
+        where: { isPublished: true },
+        take: 50,
+        select: { styleKeywords: true, gender: true },
+      },
     },
   });
-  return orgs.map((o: any) => ({
+  return orgs.map((o: any) => {
+    const aesthetics: string[] = Array.from(
+      new Set(o.products.flatMap((p: any) => parseArr(p.styleKeywords))),
+    );
+    const genders: string[] = Array.from(
+      new Set(o.products.map((p: any) => p.gender).filter(Boolean)),
+    );
+    return {
+      ...orgSummary(o),
+      description: o.description,
+      businessType: o.businessType,
+      productCount: o._count.products,
+      ratingAvg: o.ratingAvg || 0,
+      ratingCount: o.ratingCount || 0,
+      viewCount: o.viewCount || 0,
+      aesthetics,
+      genders,
+    };
+  });
+}
+
+export type BrandRankings = {
+  trending: BrandSummary[];
+  mostFollowed: BrandSummary[];
+  topRated: BrandSummary[];
+};
+
+// Rankings for the Explore page. We lack a time-windowed activity feed, so
+// "trending" is a weighted composite of existing denormalized signals
+// (followers, rating quality, views, catalog size). Highly rated requires at
+// least one approved review.
+export async function getBrandRankings(limit = 12): Promise<BrandRankings> {
+  const orgs = await db.organization.findMany({
+    where: { isPublished: true, members: { some: {} } },
+    orderBy: [{ followerCount: 'desc' }],
+    take: 120,
+    include: { _count: { select: { products: { where: { isPublished: true } } } } },
+  });
+
+  const base = orgs.map((o: any) => ({
     ...orgSummary(o),
     description: o.description,
     businessType: o.businessType,
     productCount: o._count.products,
+    ratingAvg: o.ratingAvg || 0,
+    ratingCount: o.ratingCount || 0,
+    viewCount: o.viewCount || 0,
   }));
+
+  const score = (b: any) =>
+    b.followerCount * 1 +
+    b.ratingAvg * b.ratingCount * 5 +
+    b.viewCount * 0.2 +
+    b.productCount * 2;
+
+  const trending = [...base].sort((a, b) => score(b) - score(a)).slice(0, limit);
+  const mostFollowed = [...base].sort((a, b) => b.followerCount - a.followerCount).slice(0, limit);
+  const topRated = [...base]
+    .filter((b) => b.ratingCount > 0)
+    .sort((a, b) => b.ratingAvg - a.ratingAvg || b.ratingCount - a.ratingCount)
+    .slice(0, limit);
+
+  // Strip the internal ranking signals so callers get clean BrandSummary[].
+  const strip = (list: any[]) =>
+    list.map(({ ratingAvg, ratingCount, viewCount, ...rest }) => rest);
+
+  return {
+    trending: strip(trending),
+    mostFollowed: strip(mostFollowed),
+    topRated: strip(topRated),
+  };
 }
 
-export async function getBrandBySlug(slug: string): Promise<(OrgSummary & { description: string | null; contactEmail: string | null; businessType: string | null; city: string | null; websiteUrl: string | null; products: ProductCardData[] }) | null> {
+export async function getBrandBySlug(slug: string, userId?: string): Promise<(OrgSummary & { description: string | null; contactEmail: string | null; businessType: string | null; city: string | null; websiteUrl: string | null; products: ProductCardData[] }) | null> {
   const org = await db.organization.findUnique({
     where: { slug },
     include: {
@@ -264,6 +399,7 @@ export async function getBrandBySlug(slug: string): Promise<(OrgSummary & { desc
           organization: {
             select: { id: true, name: true, slug: true, logo: true, banner: true, isVerified: true, tier: true, city: true, followerCount: true },
           },
+          _count: { select: { comments: true } },
         },
       },
     },
@@ -276,7 +412,7 @@ export async function getBrandBySlug(slug: string): Promise<(OrgSummary & { desc
     businessType: org.businessType,
     city: org.city,
     websiteUrl: org.websiteUrl,
-    products: org.products.map(productCard),
+    products: userId ? await attachLiked(org.products.map((p) => productCard(p)), userId) : org.products.map((p) => productCard(p)),
   };
 }
 
@@ -286,6 +422,25 @@ export async function getFollowState(userId: string, orgId: string): Promise<{ i
     db.organization.findUnique({ where: { id: orgId }, select: { followerCount: true } }),
   ]);
   return { isFollowing: Boolean(follow), followerCount: org?.followerCount || 0 };
+}
+
+// Attach the current user's like state to a list of product cards in a single query.
+async function attachLiked(cards: ProductCardData[], userId: string): Promise<ProductCardData[]> {
+  if (cards.length === 0) return cards;
+  const liked = await db.like.findMany({
+    where: { userId, productId: { in: cards.map((c) => c.id) } },
+    select: { productId: true },
+  });
+  const set = new Set(liked.map((l) => l.productId));
+  return cards.map((c) => ({ ...c, liked: set.has(c.id) }));
+}
+
+export async function getLikeState(userId: string, productId: string): Promise<{ liked: boolean; likeCount: number }> {
+  const [like, product] = await Promise.all([
+    db.like.findUnique({ where: { userId_productId: { userId, productId } } }),
+    db.product.findUnique({ where: { id: productId }, select: { likeCount: true } }),
+  ]);
+  return { liked: Boolean(like), likeCount: product?.likeCount || 0 };
 }
 
 // ===========================================================================

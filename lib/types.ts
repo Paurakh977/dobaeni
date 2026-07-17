@@ -11,6 +11,7 @@ export type OrgSummary = {
   isVerified: boolean;
   tier: string;
   city: string | null;
+  businessType: string | null;
   followerCount: number;
 };
 
@@ -30,6 +31,13 @@ export type ProductCardData = {
   category: string | null;
   tags: string[];
   material: string | null;
+  gender: string | null;
+  occasion: string[];
+  viewCount: number;
+  isFeatured: boolean;
+  likeCount: number;
+  commentCount: number;
+  liked?: boolean;
 };
 
 export type BoardSummary = {

@@ -9,13 +9,13 @@ export const dynamic = 'force-dynamic';
 
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const product = await getProductBySlug(slug);
+  const session = await getSession();
+  const product = await getProductBySlug(slug, session?.user.id);
   if (!product) notFound();
 
   // Record an aggregate view (cheap, no per-user rows for MVP).
   void db.product.update({ where: { id: product.id }, data: { viewCount: { increment: 1 } } }).catch(() => {});
 
-  const session = await getSession();
   const follow = session
     ? await getFollowState(session.user.id, product.organization.id)
     : { isFollowing: false, followerCount: product.organization.followerCount };

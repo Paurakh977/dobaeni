@@ -10,6 +10,8 @@ import { StarInput } from '@/app/components/StarInput';
 import FollowButton from '@/app/components/FollowButton';
 import SaveToBoard from '@/app/components/SaveToBoard';
 import AddToCartButton from '@/app/components/AddToCartButton';
+import LikeButton from '@/app/components/LikeButton';
+import CommentSection from '@/app/components/CommentSection';
 import { formatPrice, formatDate, discountPercent, TIER_BADGE } from '@/lib/format';
 import type { ProductDetail, ReviewData } from '@/lib/queries';
 
@@ -176,6 +178,13 @@ export default function ProductDetail({
               {product.ratingCount > 0 ? `${product.ratingAvg.toFixed(1)} · ${product.ratingCount} reviews` : 'No reviews yet'}
             </span>
             {product.soldCount > 0 && <span>· {product.soldCount} sold</span>}
+            <LikeButton
+              productId={product.id}
+              initialLiked={product.liked}
+              initialCount={product.likeCount}
+              size={14}
+              className="ml-auto"
+            />
           </div>
 
           {product.description && (
@@ -395,6 +404,15 @@ export default function ProductDetail({
             )}
           </div>
         </div>
+      </div>
+
+      {/* Comments */}
+      <div className="mt-16">
+        <CommentSection
+          productId={product.id}
+          initialComments={product.comments}
+          initialCount={product.commentCount}
+        />
       </div>
     </div>
   );
