@@ -2,10 +2,11 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { BadgeCheck } from 'lucide-react';
+import { BadgeCheck, MessageCircle } from 'lucide-react';
 import SafeImage from './SafeImage';
 import { StarRating } from './StarRating';
 import { formatPrice, discountPercent } from '@/lib/format';
+import LikeButton from './LikeButton';
 import type { ProductCardData } from '@/lib/types';
 
 export default function ProductCard({
@@ -38,6 +39,15 @@ export default function ProductCard({
               {disc}% off
             </span>
           )}
+          <div className="absolute right-3 top-3 rounded-full bg-black/40 p-1.5 backdrop-blur-md">
+            <LikeButton
+              productId={product.id}
+              initialLiked={product.liked ?? false}
+              initialCount={product.likeCount}
+              showCount={false}
+              size={15}
+            />
+          </div>
         </div>
 
         <div className="mt-3">
@@ -66,6 +76,11 @@ export default function ProductCard({
             <StarRating value={product.ratingAvg} size={11} />
             <span>{product.ratingCount || 0}</span>
             {product.soldCount > 0 && <span>· {product.soldCount} sold</span>}
+            {product.commentCount > 0 && (
+              <span className="flex items-center gap-0.5">
+                <MessageCircle size={11} /> {product.commentCount}
+              </span>
+            )}
           </div>
         </div>
       </Link>

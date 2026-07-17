@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   const product = await db.product.findUnique({
     where: { id: productId },
-    select: { id: true, ratingAvg: true, ratingCount: true },
+    select: { id: true, organizationId: true, ratingAvg: true, ratingCount: true },
   });
   if (!product) return NextResponse.json({ error: 'Product not found' }, { status: 404 });
 
@@ -46,6 +46,21 @@ export async function POST(req: NextRequest) {
     data: {
       ratingAvg: agg._avg.rating ?? 0,
       ratingCount: agg._count,
+    },
+  });
+
+  // Roll product ratings up to the parent organization so brand-level
+  // rankings (e.g. Top Rated) reflect real review activity.
+  const orgAgg = await db.review.aggregate({
+    where: { product: { organizationId: product.organizationId }, status: 'approved' },
+    _avg: { rating: true },
+    _count: true,
+  });
+  await db.organization.update({
+    where: { id: product.organizationId },
+    data: {
+      ratingAvg: orgAgg._avg.rating ?? 0,
+      ratingCount: orgAgg._count,
     },
   });
 
