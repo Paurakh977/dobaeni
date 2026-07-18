@@ -18,7 +18,8 @@ import { formatPrice, formatDate, formatNumber, AESTHETICS } from '@/lib/format'
 import type { SellerStats, SellerProductView, OrderView, SellerAnalytics, FavBrand } from '@/lib/queries';
 import LikedTab from '@/app/components/dashboard/LikedTab';
 import FavBrandsTab from '@/app/components/dashboard/FavBrandsTab';
-import type { ProductCardData } from '@/lib/types';
+import LooksTab from '@/app/components/dashboard/LooksTab';
+import type { ProductCardData, LookSummary } from '@/lib/types';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 type Promotion = {
@@ -36,6 +37,7 @@ const TABS = [
   { id: 'overview',   label: 'Overview',   icon: LayoutDashboard },
   { id: 'analytics',  label: 'Analytics',  icon: BarChart3 },
   { id: 'products',   label: 'Products',   icon: Package },
+  { id: 'looks',      label: 'Looks',      icon: Layers },
   { id: 'orders',     label: 'Orders',     icon: ShoppingBag },
   { id: 'promotions', label: 'Promotions', icon: Megaphone },
   { id: 'liked',      label: 'Liked',      icon: Heart },
@@ -212,7 +214,7 @@ function StatCard({
 
 /* ─── Main component ─────────────────────────────────────────────────── */
 export default function SellerDashboard({
-  orgName, orgSlug, analyticsLocked, suspended, stats, products, orders, analytics, promotions, liked, favBrands,
+  orgName, orgSlug, analyticsLocked, suspended, stats, products, orders, analytics, promotions, liked, favBrands, looks,
 }: {
   orgName: string;
   orgSlug: string | null;
@@ -225,7 +227,9 @@ export default function SellerDashboard({
   promotions: Promotion[];
   liked: ProductCardData[];
   favBrands: FavBrand[];
+  looks: LookSummary[];
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState('overview');
 
   return (
@@ -345,6 +349,7 @@ export default function SellerDashboard({
           {tab === 'overview'   && <Overview analyticsLocked={analyticsLocked} stats={stats} orders={orders} analytics={analytics} />}
           {tab === 'analytics'  && <Analytics analyticsLocked={analyticsLocked} stats={stats} initial={analytics} />}
           {tab === 'products'   && <Products suspended={suspended} products={products} />}
+          {tab === 'looks'      && <LooksTab looks={looks} products={products} onChanged={() => router.refresh()} />}
           {tab === 'orders'     && <Orders   suspended={suspended} orders={orders} />}
           {tab === 'promotions' && <Promotions suspended={suspended} promotions={promotions} />}
           {tab === 'liked'      && <LikedTab products={liked} />}

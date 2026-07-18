@@ -193,6 +193,7 @@ model Organization {
   products      Product[]
   orders        Order[]
   promotions    Promotion[]
+  looks         ShopTheLook[]
   follows       Follow[]       @relation("FollowedOrg")
   conversations Conversation[] @relation("OrgConversations")
 
@@ -364,6 +365,7 @@ model Product {
   comments     Comment[]
   promotions   Promotion[]
   productViews ProductView[]
+  lookHotspots LookHotspot[]
 
   @@index([organizationId])
   @@index([categoryId])
@@ -383,6 +385,64 @@ model ProductImage {
 
   @@index([productId])
   @@map("productImage")
+}
+
+// ===========================================================================
+// SHOP THE LOOK — curated lifestyle/model images with shoppable hotspot dots.
+// Each look image can carry several hotspots, each linking to an existing
+// product so buyers can purchase the whole look or individual pieces.
+// ===========================================================================
+
+model ShopTheLook {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  title       String
+  slug        String?      @unique
+  description String?
+  coverImage  String
+  imageWidth  Int? // original image dimensions (for responsive dot scaling)
+  imageHeight Int?
+
+  // Bundle purchase (optional discounted price for buying the whole look)
+  bundlePrice    Float? // total if every linked product is bought together
+  bundleDiscount Float? // percentage off the summed individual price
+
+  isPublished Boolean? @default(false)
+  isFeatured  Boolean? @default(false)
+  viewCount   Int?     @default(0)
+  likeCount   Int?     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  hotspots LookHotspot[]
+
+  @@index([organizationId])
+  @@index([isPublished])
+  @@map("shopTheLook")
+}
+
+model LookHotspot {
+  id        String       @id @default(cuid())
+  lookId    String
+  look      ShopTheLook  @relation(fields: [lookId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product      @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  // Position as percentages (0-100) relative to the cover image.
+  left     Float
+  top      Float
+  position Int?  @default(0)
+  label    String? // optional caption shown near the dot (e.g. "Silk Tie")
+
+  createdAt DateTime @default(now())
+
+  @@unique([lookId, productId]) // one hotspot per product per look
+  @@index([lookId])
+  @@index([productId])
+  @@map("lookHotspot")
 }
 
 // ===========================================================================

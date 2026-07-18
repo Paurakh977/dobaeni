@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/get-session';
-import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders, getSellerAnalytics, getLikedProducts, getFavoriteBrands } from '@/lib/queries';
+import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders, getSellerAnalytics, getLikedProducts, getFavoriteBrands, getLooksByOrg } from '@/lib/queries';
 import { db } from '@/lib/db';
 import SellerDashboard from './SellerDashboard';
 import PageShell from '@/app/components/PageShell';
@@ -32,7 +32,7 @@ export default async function SellerPage() {
     );
   }
 
-  const [stats, products, orders, analytics, rawPromotions, liked, favBrands] = await Promise.all([
+  const [stats, products, orders, analytics, rawPromotions, liked, favBrands, looks] = await Promise.all([
     getSellerStats(org.id),
     getSellerProducts(org.id),
     getSellerOrders(org.id),
@@ -44,6 +44,7 @@ export default async function SellerPage() {
     }),
     getLikedProducts(session.user.id),
     getFavoriteBrands(session.user.id),
+    getLooksByOrg(org.id),
   ]);
 
   // Serialize Date fields so they match the client component's plain types.
@@ -71,6 +72,7 @@ export default async function SellerPage() {
         promotions={promotions}
         liked={liked}
         favBrands={favBrands}
+        looks={looks}
       />
     </PageShell>
   );

@@ -8,10 +8,16 @@ export default function CartBadge({ className = '' }: { className?: string }) {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
-    fetch('/api/cart')
-      .then((r) => r.json())
-      .then((d) => setCount(d.count || 0))
-      .catch(() => {});
+    const load = () =>
+      fetch('/api/cart')
+        .then((r) => r.json())
+        .then((d) => setCount(d.count || 0))
+        .catch(() => {});
+
+    const onCartChange = () => load();
+    load();
+    window.addEventListener('cart:updated', onCartChange);
+    return () => window.removeEventListener('cart:updated', onCartChange);
   }, []);
 
   return (

@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import type { OrgSummary, ProductCardData, BoardSummary } from './types';
+import type { OrgSummary, ProductCardData, BoardSummary, LookSummary, LookDetail, LookHotspotData } from './types';
 
 // ===========================================================================
 // Serialization helpers — everything returned crosses the server/client
@@ -1229,4 +1229,246 @@ export async function getBuyerProfile(userId: string) {
     select: { name: true, email: true, image: true, interests: true },
   });
   return { profile, user };
+}
+
+// ===========================================================================
+// SHOP THE LOOK
+// ===========================================================================
+
+// Serialize a look row (with nested hotspots) into a LookDetail. The nested
+// product images are flattened to a single thumbnail URL.
+function lookDetail(look: any): LookDetail {
+  const hotspots: LookHotspotData[] = (look.hotspots || [])
+    .map((h: any) => ({
+      id: h.id,
+      productId: h.productId,
+      left: h.left,
+      top: h.top,
+      position: h.position ?? 0,
+      label: h.label ?? null,
+      product: {
+        id: h.product?.id,
+        name: h.product?.name ?? 'Product',
+        slug: h.product?.slug ?? null,
+        price: h.product?.price ?? 0,
+        compareAtPrice: h.product?.compareAtPrice ?? null,
+        currency: h.product?.currency || 'NPR',
+        image: h.product?.images?.[0]?.url ?? null,
+        stock: h.product?.stock ?? 0,
+      },
+    }))
+    .sort((a: any, b: any) => a.position - b.position);
+
+  const totalPrice = hotspots.reduce((s, h) => s + h.product.price, 0);
+
+  return {
+    id: look.id,
+    title: look.title,
+    slug: look.slug,
+    description: look.description ?? null,
+    coverImage: look.coverImage,
+    imageWidth: look.imageWidth ?? null,
+    imageHeight: look.imageHeight ?? null,
+    bundlePrice: look.bundlePrice ?? null,
+    bundleDiscount: look.bundleDiscount ?? null,
+    isPublished: Boolean(look.isPublished),
+    isFeatured: Boolean(look.isFeatured),
+    viewCount: look.viewCount || 0,
+    likeCount: look.likeCount || 0,
+    hotspotCount: hotspots.length,
+    totalPrice,
+    createdAt: look.createdAt.toISOString(),
+    hotspots,
+  };
+}
+
+// Seller: all looks for their org (published + drafts).
+export async function getLooksByOrg(orgId: string): Promise<LookSummary[]> {
+  const looks = await db.shopTheLook.findMany({
+    where: { organizationId: orgId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      _count: { select: { hotspots: true } },
+      hotspots: {
+        select: {
+          id: true,
+          left: true,
+          top: true,
+          productId: true,
+          product: { select: { id: true, name: true, slug: true, price: true, compareAtPrice: true, currency: true, images: { orderBy: { position: 'asc' }, take: 1 }, stock: true } },
+        },
+      },
+    },
+  });
+  return looks.map((l: any) => ({
+    id: l.id,
+    title: l.title,
+    slug: l.slug,
+    description: l.description ?? null,
+    coverImage: l.coverImage,
+    imageWidth: l.imageWidth ?? null,
+    imageHeight: l.imageHeight ?? null,
+    bundlePrice: l.bundlePrice ?? null,
+    bundleDiscount: l.bundleDiscount ?? null,
+    isPublished: Boolean(l.isPublished),
+    isFeatured: Boolean(l.isFeatured),
+    viewCount: l.viewCount || 0,
+    likeCount: l.likeCount || 0,
+    hotspotCount: l._count.hotspots,
+    hotspots: (l.hotspots || []).map((h: any) => ({
+      id: h.id,
+      left: h.left,
+      top: h.top,
+      productId: h.productId,
+      product: {
+        id: h.product.id,
+        name: h.product.name,
+        slug: h.product.slug,
+        price: h.product.price,
+        compareAtPrice: h.product.compareAtPrice,
+        currency: h.product.currency,
+        image: h.product.images?.[0]?.url ?? null,
+        stock: h.product.stock,
+      },
+    })),
+    totalPrice: (l.hotspots || []).reduce((s: number, h: any) => s + (h.product?.price ?? 0), 0),
+    createdAt: l.createdAt.toISOString(),
+  }));
+}
+
+// Buyer (global feed / public): published looks across ALL brands.
+export async function getPublishedLooks(limit?: number): Promise<LookSummary[]> {
+  const looks = await db.shopTheLook.findMany({
+    where: { isPublished: true },
+    orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+    ...(limit ? { take: limit } : {}),
+    include: {
+      _count: { select: { hotspots: true } },
+      hotspots: {
+        select: {
+          id: true,
+          left: true,
+          top: true,
+          productId: true,
+          product: { select: { id: true, name: true, slug: true, price: true, compareAtPrice: true, currency: true, images: { orderBy: { position: 'asc' }, take: 1 }, stock: true } },
+        },
+      },
+    },
+  });
+  return looks.map((l: any) => ({
+    id: l.id,
+    title: l.title,
+    slug: l.slug,
+    description: l.description ?? null,
+    coverImage: l.coverImage,
+    imageWidth: l.imageWidth ?? null,
+    imageHeight: l.imageHeight ?? null,
+    bundlePrice: l.bundlePrice ?? null,
+    bundleDiscount: l.bundleDiscount ?? null,
+    isPublished: true,
+    isFeatured: Boolean(l.isFeatured),
+    viewCount: l.viewCount || 0,
+    likeCount: l.likeCount || 0,
+    hotspotCount: l._count.hotspots,
+    hotspots: (l.hotspots || []).map((h: any) => ({
+      id: h.id,
+      left: h.left,
+      top: h.top,
+      productId: h.productId,
+      product: {
+        id: h.product.id,
+        name: h.product.name,
+        slug: h.product.slug,
+        price: h.product.price,
+        compareAtPrice: h.product.compareAtPrice,
+        currency: h.product.currency,
+        image: h.product.images?.[0]?.url ?? null,
+        stock: h.product.stock,
+      },
+    })),
+    totalPrice: (l.hotspots || []).reduce((s: number, h: any) => s + (h.product?.price ?? 0), 0),
+    createdAt: l.createdAt.toISOString(),
+  }));
+}
+
+// Buyer (brand storefront / public): published looks for an org.
+export async function getLooksByBrand(orgId: string, limit?: number): Promise<LookSummary[]> {
+  const looks = await db.shopTheLook.findMany({
+    where: { organizationId: orgId, isPublished: true },
+    orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
+    ...(limit ? { take: limit } : {}),
+    include: {
+      _count: { select: { hotspots: true } },
+      hotspots: {
+        select: {
+          id: true,
+          left: true,
+          top: true,
+          productId: true,
+          product: { select: { id: true, name: true, slug: true, price: true, compareAtPrice: true, currency: true, images: { orderBy: { position: 'asc' }, take: 1 }, stock: true } },
+        },
+      },
+    },
+  });
+  return looks.map((l: any) => ({
+    id: l.id,
+    title: l.title,
+    slug: l.slug,
+    description: l.description ?? null,
+    coverImage: l.coverImage,
+    imageWidth: l.imageWidth ?? null,
+    imageHeight: l.imageHeight ?? null,
+    bundlePrice: l.bundlePrice ?? null,
+    bundleDiscount: l.bundleDiscount ?? null,
+    isPublished: true,
+    isFeatured: Boolean(l.isFeatured),
+    viewCount: l.viewCount || 0,
+    likeCount: l.likeCount || 0,
+    hotspotCount: l._count.hotspots,
+    hotspots: (l.hotspots || []).map((h: any) => ({
+      id: h.id,
+      left: h.left,
+      top: h.top,
+      productId: h.productId,
+      product: {
+        id: h.product.id,
+        name: h.product.name,
+        slug: h.product.slug,
+        price: h.product.price,
+        compareAtPrice: h.product.compareAtPrice,
+        currency: h.product.currency,
+        image: h.product.images?.[0]?.url ?? null,
+        stock: h.product.stock,
+      },
+    })),
+    totalPrice: (l.hotspots || []).reduce((s: number, h: any) => s + (h.product?.price ?? 0), 0),
+    createdAt: l.createdAt.toISOString(),
+  }));
+}
+
+export async function getLookById(id: string): Promise<LookDetail | null> {
+  const look = await db.shopTheLook.findUnique({
+    where: { id },
+    include: {
+      hotspots: {
+        orderBy: { position: 'asc' },
+        include: { product: { include: { images: { orderBy: { position: 'asc' }, take: 1 } } } },
+      },
+    },
+  });
+  return look ? lookDetail(look) : null;
+}
+
+// Public: look by slug (must be published).
+export async function getLookBySlug(slug: string): Promise<LookDetail | null> {
+  const look = await db.shopTheLook.findFirst({
+    where: { slug, isPublished: true },
+    include: {
+      hotspots: {
+        orderBy: { position: 'asc' },
+        include: { product: { include: { images: { orderBy: { position: 'asc' }, take: 1 } } } },
+      },
+    },
+  });
+  return look ? lookDetail(look) : null;
 }

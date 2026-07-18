@@ -6,8 +6,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import SafeImage from '@/app/components/SafeImage';
 import FollowButton from '@/app/components/FollowButton';
 import ProductCard from '@/app/components/ProductCard';
+import LookCard from '@/app/components/look/LookCard';
 import { TIER_BADGE, formatNumber, AESTHETICS } from '@/lib/format';
-import type { ProductCardData } from '@/lib/types';
+import type { ProductCardData, LookSummary } from '@/lib/types';
 
 type Brand = {
   id: string;
@@ -24,6 +25,7 @@ type Brand = {
   businessType: string | null;
   websiteUrl: string | null;
   products: ProductCardData[];
+  looks?: LookSummary[];
 };
 
 const containerVariants = {
@@ -51,10 +53,12 @@ export default function BrandStorefront({
   brand,
   initialFollowing,
   initialFollowerCount,
+  looks = [],
 }: {
   brand: Brand;
   initialFollowing: boolean;
   initialFollowerCount: number;
+  looks?: LookSummary[];
 }) {
   const tier = TIER_BADGE[brand.tier];
 
@@ -149,6 +153,19 @@ export default function BrandStorefront({
         <motion.p variants={itemVariants} className="max-w-2xl text-[14px] font-light leading-relaxed text-[#9A9AA0]">
           {brand.description}
         </motion.p>
+      )}
+
+      {looks.length > 0 && (
+        <motion.div variants={itemVariants} className="space-y-4 pt-2">
+          <h2 className="text-[11px] font-mono uppercase tracking-[0.25em] text-[#8E8E93]">
+            Shop the Look · {looks.length} styled {looks.length === 1 ? 'set' : 'sets'}
+          </h2>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {looks.map((look, i) => (
+              <LookCard key={look.id} look={look} index={i} />
+            ))}
+          </div>
+        </motion.div>
       )}
 
       <motion.div variants={itemVariants} className="space-y-6 pt-4">

@@ -12,6 +12,7 @@ import { ChatModal } from "./components/ChatModal";
 
   const LINKS: { label: string; href: string }[] = [
     { label: "Discover", href: "/discover" },
+    { label: "Shop the Look", href: "/looks" },
     { label: "Boards", href: "/dashboard/boards" },
     { label: "Brands", href: "/brands" },
     { label: "Access", href: "#" },

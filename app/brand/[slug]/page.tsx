@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { getSession } from '@/lib/get-session';
-import { getBrandBySlug, getFollowState } from '@/lib/queries';
+import { getBrandBySlug, getFollowState, getLooksByBrand } from '@/lib/queries';
 import BrandStorefront from './BrandStorefront';
 import PageShell from '@/app/components/PageShell';
 
@@ -16,9 +16,16 @@ export default async function BrandPage({ params }: { params: Promise<{ slug: st
     ? await getFollowState(session.user.id, brand.id)
     : { isFollowing: false, followerCount: brand.followerCount };
 
+  const looks = await getLooksByBrand(brand.id);
+
   return (
     <PageShell>
-      <BrandStorefront brand={brand} initialFollowing={follow.isFollowing} initialFollowerCount={follow.followerCount} />
+      <BrandStorefront
+        brand={brand}
+        initialFollowing={follow.isFollowing}
+        initialFollowerCount={follow.followerCount}
+        looks={looks}
+      />
     </PageShell>
   );
 }

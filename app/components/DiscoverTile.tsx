@@ -34,10 +34,17 @@ export default function DiscoverTile({
       viewport={{ once: true, margin: '120px 0px' }}
       transition={{ duration: 0.9, delay: Math.min(index * 0.04, 0.3), ease: [0.22, 0.61, 0.36, 1] }}
     >
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         onClick={() => onActivate?.(item)}
-        className="group block w-full text-left"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onActivate?.(item);
+          }
+        }}
+        className="group block w-full cursor-pointer text-left"
         data-cursor="hover"
       >
         <div className="relative aspect-[4/5] overflow-hidden rounded-2xl border border-white/[0.06] bg-neutral-900/60">
@@ -70,7 +77,7 @@ export default function DiscoverTile({
             <Maximize2 className="h-2.5 w-2.5 text-neutral-200" />
           </div>
         </div>
-      </button>
+      </div>
     </motion.div>
   );
 }
