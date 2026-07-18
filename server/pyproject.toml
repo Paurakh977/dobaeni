@@ -5,6 +5,10 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "google-adk>=2.5.0",
-    "litellm>=1.92.0",
+    "fastapi>=0.139.2",
+    "google-adk[extensions]>=2.5.0",
+    "uvicorn[standard]>=0.35.0",
+    "python-dotenv>=1.0.0",
+    "litellm>=1.0.0",
+    "requests>=2.31.0",
 ]
