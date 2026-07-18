@@ -206,10 +206,10 @@ export default function ProductDetail({
       {/* Main Container */}
       <div className="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:gap-14">
         {/* Left Side: Media Section */}
-        <div className="lg:col-span-7">
-          <div className="lg:sticky lg:top-28">
+        <div className="lg:col-span-5">
+          <div className="lg:sticky lg:top-24">
             {/* Stage Frame */}
-            <div className="group relative aspect-[4/5] overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0E0E12]">
+            <div className="group relative overflow-hidden rounded-3xl border border-white/[0.08] bg-[#0E0E12] aspect-[4/5] lg:aspect-auto lg:h-[calc(100vh-9rem)]">
               <AnimatePresence mode="wait">
                 <motion.div
                   key={active}
@@ -217,13 +217,13 @@ export default function ProductDetail({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.3 }}
-                  className="h-full w-full overflow-hidden"
-                >
-                  <SafeImage
-                    src={mainImage}
-                    alt={product.name}
-                    className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
-                  />
+                    className="h-full w-full overflow-hidden"
+                 >
+                   <SafeImage
+                     src={mainImage}
+                     alt={product.name}
+                     className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+                   />
                 </motion.div>
               </AnimatePresence>
 
@@ -268,7 +268,7 @@ export default function ProductDetail({
         </div>
 
         {/* Right Side: Purchasing Context */}
-        <div className="flex flex-col lg:col-span-5">
+        <div className="flex flex-col lg:col-span-7">
           {/* Brand header */}
           <div className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-4">
             <div className="flex items-center justify-between gap-3">
