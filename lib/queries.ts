@@ -741,6 +741,8 @@ export async function getBoardById(id: string, userId: string): Promise<BoardDet
 
 export type OrderItemView = {
   id: string;
+  productId: string;
+  productSlug: string | null;
   productName: string;
   productImage: string | null;
   size: string | null;
@@ -781,6 +783,8 @@ function orderView(o: any): OrderView {
     courierName: o.courierName,
     items: o.items.map((it: any) => ({
       id: it.id,
+      productId: it.productId,
+      productSlug: it.product?.slug ?? null,
       productName: it.productName || '',
       productImage: it.productImage,
       size: it.size,
@@ -798,7 +802,7 @@ export async function getBuyerOrders(userId: string): Promise<OrderView[]> {
     where: { buyerId: userId },
     orderBy: { createdAt: 'desc' },
     include: {
-      items: true,
+      items: { include: { product: { select: { slug: true } } } },
       organization: { select: { id: true, name: true, slug: true, logo: true } },
     },
   });
@@ -810,11 +814,117 @@ export async function getSellerOrders(orgId: string): Promise<OrderView[]> {
     where: { organizationId: orgId },
     orderBy: { createdAt: 'desc' },
     include: {
-      items: true,
+      items: { include: { product: { select: { slug: true } } } },
       organization: { select: { id: true, name: true, slug: true, logo: true } },
     },
   });
   return orders.map(orderView);
+}
+
+// Single order, accessible to the buyer (buyerId === userId) or any member of
+// the selling org (so sellers can open the same detail page). Returns null if
+// the order doesn't exist or the viewer isn't authorized.
+export async function getOrderById(orderId: string, userId: string): Promise<(OrderView & { viewerRole: 'buyer' | 'seller' }) | null> {
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    include: {
+      items: { include: { product: { select: { slug: true } } } },
+      organization: { select: { id: true, name: true, slug: true, logo: true } },
+    },
+  });
+  if (!order) return null;
+
+  const isBuyer = order.buyerId === userId;
+  const member = await db.member.findFirst({
+    where: { organizationId: order.organizationId, userId },
+    select: { id: true },
+  });
+  const isSeller = Boolean(member);
+  if (!isBuyer && !isSeller) return null;
+
+  return { ...orderView(order), viewerRole: isBuyer ? 'buyer' : 'seller' };
+}
+
+// ===========================================================================
+// LIKED PRODUCTS (per-user) — powers the dashboard "Liked" tab.
+// The Like model already keys on (userId, productId), so this works for any
+// user type (buyer or seller) with zero schema changes.
+// ===========================================================================
+
+export type FavBrand = OrgSummary & {
+  productCount: number;
+  ratingAvg: number;
+  isFollowing: boolean;
+  orderCount: number;
+  previewImages: string[];
+};
+
+export async function getLikedProducts(userId: string): Promise<ProductCardData[]> {
+  const likes = await db.like.findMany({
+    where: { userId },
+    orderBy: { createdAt: 'desc' },
+    include: {
+      product: {
+        include: {
+          images: { orderBy: { position: 'asc' }, take: 1 },
+          category: { select: { name: true } },
+          organization: {
+            select: {
+              id: true, name: true, slug: true, logo: true, banner: true,
+              isVerified: true, tier: true, city: true, followerCount: true,
+            },
+          },
+          _count: { select: { comments: true } },
+        },
+      },
+    },
+  });
+  return likes
+    .map((l) => l.product)
+    .filter((p): p is NonNullable<typeof p> => p != null && p.isActive === true)
+    .map((p) => productCard(p, true));
+}
+
+// Brands the user has either PURCHASED from or FOLLOWS — their "favourite
+// brands". Sorted by purchase frequency, then follower count. Works for any
+// user type.
+export async function getFavoriteBrands(userId: string): Promise<FavBrand[]> {
+  const [orders, follows] = await Promise.all([
+    db.order.findMany({ where: { buyerId: userId }, select: { organizationId: true } }),
+    db.follow.findMany({ where: { followerId: userId }, select: { organizationId: true } }),
+  ]);
+
+  const purchaseCount = new Map<string, number>();
+  for (const o of orders) {
+    purchaseCount.set(o.organizationId, (purchaseCount.get(o.organizationId) || 0) + 1);
+  }
+  const followingSet = new Set(follows.map((f) => f.organizationId));
+  const orgIds = Array.from(new Set([...purchaseCount.keys(), ...followingSet]));
+  if (orgIds.length === 0) return [];
+
+  const orgs = await db.organization.findMany({
+    where: { id: { in: orgIds } },
+    include: {
+      _count: { select: { products: { where: { isPublished: true } } } },
+      products: {
+        where: { isPublished: true },
+        take: 4,
+        orderBy: { likeCount: 'desc' },
+        select: { images: { orderBy: { position: 'asc' }, take: 1, select: { url: true } } },
+      },
+    },
+  });
+
+  return orgs
+    .map((o: any) => ({
+      ...orgSummary(o),
+      productCount: o._count.products,
+      ratingAvg: o.ratingAvg || 0,
+      isFollowing: followingSet.has(o.id),
+      orderCount: purchaseCount.get(o.id) || 0,
+      previewImages: o.products.map((p: any) => p.images[0]?.url).filter(Boolean),
+    }))
+    .sort((a: any, b: any) => (b.orderCount - a.orderCount) || (b.followerCount - a.followerCount));
 }
 
 // ===========================================================================

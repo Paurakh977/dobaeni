@@ -7,6 +7,8 @@ import {
   getSellerStats,
   getSellerOrders,
   getSellerProducts,
+  getLikedProducts,
+  getFavoriteBrands,
 } from '@/lib/queries';
 import DashboardClient from './DashboardClient';
 
@@ -41,7 +43,11 @@ export default async function DashboardPage() {
         getSellerOrders(org.id),
         getSellerProducts(org.id),
       ]);
-      data = { org, stats, orders, products };
+      const [liked, favBrands] = await Promise.all([
+        getLikedProducts(user.id),
+        getFavoriteBrands(user.id),
+      ]);
+      data = { org, stats, orders, products, liked, favBrands };
     }
   } else {
     const [boards, orders] = await Promise.all([
@@ -49,7 +55,11 @@ export default async function DashboardPage() {
       getBuyerOrders(user.id),
     ]);
     const savedItems = boards.reduce((sum: number, b: any) => sum + b.itemCount, 0);
-    data = { boards, orders, savedItems };
+    const [liked, favBrands] = await Promise.all([
+      getLikedProducts(user.id),
+      getFavoriteBrands(user.id),
+    ]);
+    data = { boards, orders, savedItems, liked, favBrands };
   }
 
   return (

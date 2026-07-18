@@ -45,3 +45,6 @@ next-env.d.ts
 /public/seed/
 
 public/uploads/*
+
+# user uploads (served via app/uploads/[...path]/route.ts)
+uploads/

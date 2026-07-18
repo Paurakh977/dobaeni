@@ -7,12 +7,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, Heart, ShoppingBag, Settings, LogOut, ChevronRight,
   ArrowLeft, BarChart3, Store, Megaphone, Package, Users, Star, ExternalLink,
-  Sparkles, TrendingUp, Activity, Zap, Clock, Grid3X3, Search,
+  Sparkles, TrendingUp, Activity, Zap, Clock, Grid3X3, Search, Bookmark,
 } from "lucide-react";
 import AccountPanel from "./AccountPanel";
 import SafeImage from "@/app/components/SafeImage";
 import BoardCollagePreview from "@/app/components/BoardCollagePreview";
 import CustomCursor from "@/app/CustomCursor";
+import LikedTab from "@/app/components/dashboard/LikedTab";
+import FavBrandsTab from "@/app/components/dashboard/FavBrandsTab";
 import { formatPrice, formatDate, formatNumber } from "@/lib/format";
 
 /* ─── Design tokens ─────────────────────────────────────────────────── */
@@ -109,7 +111,7 @@ function OrderRow({ order, isSeller }: { order: any; isSeller?: boolean }) {
 
   return (
     <Link
-      href={isSeller ? "/dashboard/seller" : "/orders"}
+      href={`/orders/${order.id}`}
       data-cursor="hover"
       className="group flex items-center gap-4 rounded-2xl border border-white/[0.04] bg-[#0E0E12]/60 p-3.5 transition-all duration-300 hover:border-[#DFBA73]/20 hover:bg-[#121215]/80 hover:shadow-[0_0_20px_rgba(223,186,115,0.04)]"
     >
@@ -136,9 +138,15 @@ function OrderRow({ order, isSeller }: { order: any; isSeller?: boolean }) {
         <p className="truncate text-[13px] font-light text-[#E8E8E8] transition-colors duration-300 group-hover:text-[#DFBA73]">
           {first?.productName || "Order"}
         </p>
-        <p className="mt-0.5 text-[10px] font-mono text-[#52525B] tracking-wide">
-          {order.orderNumber} · {formatDate(order.createdAt)}
-        </p>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[10px] font-mono text-[#52525B] tracking-wide">
+          <span>{order.orderNumber} · {formatDate(order.createdAt)}</span>
+          {order.brand?.slug && (
+            <>
+              <span className="text-white/10">·</span>
+              <span className="truncate text-[#8E8E93] transition-colors group-hover:text-[#DFBA73]">{order.brand.name}</span>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Right side */}
@@ -348,7 +356,9 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
   const BUYER_TABS = [
     { id: "overview", label: "Overview",          icon: LayoutDashboard },
     { id: "orders",   label: "My Orders",          icon: ShoppingBag },
-    { id: "boards",   label: "My Boards",          icon: Heart },
+    { id: "boards",   label: "My Boards",          icon: Bookmark },
+    { id: "liked",    label: "Liked",              icon: Heart },
+    { id: "favbrands", label: "Fav Brands",        icon: Star },
     { id: "settings", label: "Account Settings",   icon: Settings },
   ];
   const SELLER_TABS = [
@@ -356,6 +366,8 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
     { id: "store",    label: "Storefront",          icon: Store },
     { id: "orders",   label: "Manage Orders",       icon: ShoppingBag },
     { id: "ads",      label: "Advertisements",      icon: Megaphone },
+    { id: "liked",    label: "Liked",              icon: Heart },
+    { id: "favbrands", label: "Fav Brands",        icon: Star },
     { id: "settings", label: "Account Settings",    icon: Settings },
   ];
 
@@ -365,6 +377,8 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
   const savedItems: number = data?.savedItems ?? 0;
   const stats: any     = data?.stats;
   const products: any[]= data?.products  ?? [];
+  const liked: any[]   = data?.liked      ?? [];
+  const favBrands: any[] = data?.favBrands ?? [];
   const recent         = orders.slice(0, 4);
 
   const avatarInitial = (user.name || user.email || "?").charAt(0).toUpperCase();
@@ -620,7 +634,13 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                               </span>
                             </div>
                             <div className="p-4">
-                              <p className="truncate text-[13px] font-light text-[#FAF9F6] group-hover:text-[#DFBA73] transition-colors duration-300">{p.name}</p>
+                              <Link
+                                href={p.slug ? `/product/${p.slug}` : `/product/${p.id}`}
+                                data-cursor="hover"
+                                className="truncate text-[13px] font-light text-[#FAF9F6] group-hover:text-[#DFBA73] transition-colors duration-300"
+                              >
+                                {p.name}
+                              </Link>
                               <div className="mt-1.5 flex items-center justify-between">
                                 <span className="text-[13px] font-light text-[#DFBA73]">{formatPrice(p.price, p.currency)}</span>
                                 <span className="text-[11px] font-light text-[#52525B]">{p.soldCount} sold</span>
@@ -701,6 +721,16 @@ export default function DashboardClient({ user, initialTwoFactorEnabled, emailVe
                       </motion.div>
                     )}
                   </motion.div>
+                )}
+
+                {/* ── Liked ────────────────────────────────────────── */}
+                {activeTab === "liked" && (
+                  <LikedTab products={liked} />
+                )}
+
+                {/* ── Fav Brands ───────────────────────────────────── */}
+                {activeTab === "favbrands" && (
+                  <FavBrandsTab brands={favBrands} />
                 )}
 
                 {/* ── Settings ─────────────────────────────────────── */}

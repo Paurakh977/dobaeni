@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -8,13 +9,16 @@ import {
   Pencil, Trash2, X, Lock, Sparkles, Star, Users, ExternalLink,
   Calendar, DollarSign, TrendingUp, TrendingDown, Activity, Eye, BarChart3,
   Zap, ArrowUpRight, CheckCircle2, Clock, Layers, Search, SlidersHorizontal,
-  ArrowUpDown, Truck, Filter,
+  ArrowUpDown, Truck, Filter, Heart,
 } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import ImageUpload from '@/app/components/ImageUpload';
 import { AreaChart, BarChart, DonutChart, type Segment } from '@/app/components/charts/Charts';
 import { formatPrice, formatDate, formatNumber, AESTHETICS } from '@/lib/format';
-import type { SellerStats, SellerProductView, OrderView, SellerAnalytics } from '@/lib/queries';
+import type { SellerStats, SellerProductView, OrderView, SellerAnalytics, FavBrand } from '@/lib/queries';
+import LikedTab from '@/app/components/dashboard/LikedTab';
+import FavBrandsTab from '@/app/components/dashboard/FavBrandsTab';
+import type { ProductCardData } from '@/lib/types';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
 type Promotion = {
@@ -34,6 +38,8 @@ const TABS = [
   { id: 'products',   label: 'Products',   icon: Package },
   { id: 'orders',     label: 'Orders',     icon: ShoppingBag },
   { id: 'promotions', label: 'Promotions', icon: Megaphone },
+  { id: 'liked',      label: 'Liked',      icon: Heart },
+  { id: 'favbrands', label: 'Fav Brands', icon: Star },
 ];
 
 const ORDER_STATUSES = ['pending', 'processing', 'packed', 'out_for_delivery', 'delivered', 'cancelled', 'refunded'];
@@ -206,9 +212,10 @@ function StatCard({
 
 /* ─── Main component ─────────────────────────────────────────────────── */
 export default function SellerDashboard({
-  orgName, analyticsLocked, suspended, stats, products, orders, analytics, promotions,
+  orgName, orgSlug, analyticsLocked, suspended, stats, products, orders, analytics, promotions, liked, favBrands,
 }: {
   orgName: string;
+  orgSlug: string | null;
   analyticsLocked: boolean;
   suspended: boolean;
   stats: SellerStats;
@@ -216,6 +223,8 @@ export default function SellerDashboard({
   orders: OrderView[];
   analytics: SellerAnalytics;
   promotions: Promotion[];
+  liked: ProductCardData[];
+  favBrands: FavBrand[];
 }) {
   const [tab, setTab] = useState('overview');
 
@@ -246,7 +255,9 @@ export default function SellerDashboard({
               )}
             </div>
             <h1 className="text-[42px] font-light tracking-wide font-display text-[#FAF9F6] leading-none">
-              {orgName}
+              {orgSlug ? (
+                <Link href={`/brand/${orgSlug}`} data-cursor="hover" className="transition-colors duration-300 hover:text-[#DFBA73]">{orgName}</Link>
+              ) : orgName}
             </h1>
             <p className="mt-2 text-[13px] font-light text-[#52525B]">
               {stats.products} products · {formatNumber(stats.followers)} followers · {stats.avgRating.toFixed(1)} ★
@@ -336,6 +347,8 @@ export default function SellerDashboard({
           {tab === 'products'   && <Products suspended={suspended} products={products} />}
           {tab === 'orders'     && <Orders   suspended={suspended} orders={orders} />}
           {tab === 'promotions' && <Promotions suspended={suspended} promotions={promotions} />}
+          {tab === 'liked'      && <LikedTab products={liked} />}
+          {tab === 'favbrands'  && <FavBrandsTab brands={favBrands} />}
         </motion.div>
       </AnimatePresence>
     </div>
@@ -423,12 +436,12 @@ function Overview({ analyticsLocked, stats, orders, analytics }: { analyticsLock
         ) : (
           <div className="space-y-2.5">
             {orders.slice(0, 5).map((o) => (
-              <div key={o.id} className="group flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-[#0E0E12]/40 px-4 py-3 transition-all duration-300 hover:border-[#DFBA73]/15 hover:bg-[#0E0E12]/70">
-                <span className="font-mono text-[12px] text-[#FAF9F6]">{o.orderNumber}</span>
+              <Link key={o.id} href={`/orders/${o.id}`} data-cursor="hover" className="group flex flex-wrap items-center justify-between gap-4 rounded-xl border border-white/[0.04] bg-[#0E0E12]/40 px-4 py-3 transition-all duration-300 hover:border-[#DFBA73]/15 hover:bg-[#0E0E12]/70">
+                <span className="font-mono text-[12px] text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73]">{o.orderNumber}</span>
                 <span className="text-[12px] text-[#52525B]">{o.items.length} item{o.items.length !== 1 ? 's' : ''}</span>
                 <span className="text-[13px] text-[#DFBA73] font-light tabular-nums">{formatPrice(o.totalAmount, o.currency)}</span>
                 <StatusBadge status={o.status} />
-              </div>
+              </Link>
             ))}
           </div>
         )}
@@ -802,9 +815,15 @@ function Products({ suspended, products }: { suspended: boolean; products: Selle
 
                 {/* Details */}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[14px] font-light text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73] duration-300">
-                    {p.name}
-                  </p>
+                  {p.slug ? (
+                    <Link href={`/product/${p.slug}`} data-cursor="hover" className="block truncate text-[14px] font-light text-[#FAF9F6] transition-colors duration-300 hover:text-[#DFBA73]">
+                      {p.name}
+                    </Link>
+                  ) : (
+                    <p className="truncate text-[14px] font-light text-[#FAF9F6] transition-colors group-hover:text-[#DFBA73] duration-300">
+                      {p.name}
+                    </p>
+                  )}
                   <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] text-[#52525B]">
                     <span className="text-[#DFBA73] font-light">{formatPrice(p.price, p.currency)}</span>
                     <span className="text-white/10">·</span>
@@ -1159,7 +1178,11 @@ function Orders({ suspended, orders }: { suspended: boolean; orders: OrderView[]
                           <SafeImage src={it.productImage} alt="" className="h-full w-full object-cover" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <span className="block truncate text-[13px] font-light text-[#FAF9F6]">{it.productName}</span>
+                          {it.productSlug ? (
+                            <Link href={`/product/${it.productSlug}`} data-cursor="hover" className="block truncate text-[13px] font-light text-[#FAF9F6] transition-colors duration-300 hover:text-[#DFBA73]">{it.productName}</Link>
+                          ) : (
+                            <span className="block truncate text-[13px] font-light text-[#FAF9F6]">{it.productName}</span>
+                          )}
                           <span className="block text-[10px] text-[#52525B] mt-0.5 font-mono">
                             {it.size ? `Size: ${it.size}` : ''}{it.color ? ` · Color: ${it.color}` : ''}
                           </span>

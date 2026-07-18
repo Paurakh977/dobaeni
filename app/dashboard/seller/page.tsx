@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSession } from '@/lib/get-session';
-import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders, getSellerAnalytics } from '@/lib/queries';
+import { getSellerOrg, getSellerStats, getSellerProducts, getSellerOrders, getSellerAnalytics, getLikedProducts, getFavoriteBrands } from '@/lib/queries';
 import { db } from '@/lib/db';
 import SellerDashboard from './SellerDashboard';
 import PageShell from '@/app/components/PageShell';
@@ -32,7 +32,7 @@ export default async function SellerPage() {
     );
   }
 
-  const [stats, products, orders, analytics, rawPromotions] = await Promise.all([
+  const [stats, products, orders, analytics, rawPromotions, liked, favBrands] = await Promise.all([
     getSellerStats(org.id),
     getSellerProducts(org.id),
     getSellerOrders(org.id),
@@ -42,6 +42,8 @@ export default async function SellerPage() {
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
+    getLikedProducts(session.user.id),
+    getFavoriteBrands(session.user.id),
   ]);
 
   // Serialize Date fields so they match the client component's plain types.
@@ -59,6 +61,7 @@ export default async function SellerPage() {
     <PageShell>
       <SellerDashboard
         orgName={org.name}
+        orgSlug={org.slug}
         analyticsLocked={org.analyticsLocked}
         suspended={org.status === 'suspended'}
         stats={stats}
@@ -66,6 +69,8 @@ export default async function SellerPage() {
         orders={orders}
         analytics={analytics}
         promotions={promotions}
+        liked={liked}
+        favBrands={favBrands}
       />
     </PageShell>
   );

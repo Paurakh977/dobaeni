@@ -44,7 +44,11 @@ export async function POST(req: NextRequest) {
   const ext = file.name.split('.').pop()?.toLowerCase() || 'bin';
   const safeExt = ALLOWED.has(`image/${ext}`) ? ext : 'jpg';
   const filename = `${randomUUID()}.${safeExt}`;
-  const dir = join(process.cwd(), 'public', 'uploads');
+  // Write outside `public/` — Next.js only scans `public/` for static files at
+  // server startup, so files written there later 404 until a restart. A root
+  // `uploads/` dir served by `app/uploads/[...path]/route.ts` is read from
+  // disk on every request, so freshly uploaded images are available immediately.
+  const dir = join(process.cwd(), 'uploads');
   await mkdir(dir, { recursive: true });
 
   const bytes = await file.arrayBuffer();
