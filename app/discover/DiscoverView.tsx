@@ -322,10 +322,10 @@ export default function DiscoverView({
   ]);
 
   // ---- GRID DIMENSIONS ----
-  const columns = 10;
-  const cardWidth = 158;
-  const cardHeight = 214;
-  const gap = 18;
+  const columns = 9;
+  const cardWidth = 214;
+  const cardHeight = 290;
+  const gap = 22;
 
   // Bottom row is shifted down by the per-column diagonal offset, so the
   // grid is taller than a plain rows × (card+gap) calc. Without this the
@@ -1026,7 +1026,7 @@ function DiscoverCard({
         }}
         className="group relative h-full w-full overflow-hidden rounded-lg border border-white/5 bg-neutral-900/60 p-2.5 backdrop-blur-sm transition-colors duration-300 hover:border-[#DFBA73]/40"
       >
-        <div className="relative h-[184px] w-full overflow-hidden rounded-md bg-neutral-800">
+        <div className="relative h-[270px] w-full overflow-hidden rounded-md bg-neutral-800">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={item.src}
@@ -1034,8 +1034,16 @@ function DiscoverCard({
             draggable={false}
             className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-          <div className="absolute bottom-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-md transition-all duration-300 group-hover:opacity-100">
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+          <div className="absolute inset-x-0 bottom-0 translate-y-1 px-3 pb-3 pt-6 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+            <p className="truncate text-[12px] font-medium leading-tight text-[#FAF9F6]">
+              {item.title}
+            </p>
+            <p className="mt-0.5 truncate text-[10px] font-mono uppercase tracking-wider text-[#DFBA73]/80">
+              {item.category}
+            </p>
+          </div>
+          <div className="absolute bottom-2 right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-black/40 opacity-0 backdrop-blur-md transition-all duration-300 group-hover:opacity-100">
             <Maximize2 className="h-2.5 w-2.5 text-neutral-200" />
           </div>
         </div>
