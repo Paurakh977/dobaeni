@@ -17,6 +17,7 @@ export default function CommentSection({
 }) {
   const { data: session } = useSession();
   const [comments, setComments] = useState<CommentData[]>(initialComments);
+  const [visible, setVisible] = useState(5);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -90,7 +91,7 @@ export default function CommentSection({
             No comments yet — be the first.
           </p>
         ) : (
-          comments.map((c) => (
+          comments.slice(0, visible).map((c) => (
             <div key={c.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-[#DFBA73] text-[11px] font-bold text-[#08080a]">
@@ -106,6 +107,15 @@ export default function CommentSection({
           ))
         )}
       </div>
+
+      {comments.length > visible && (
+        <button
+          onClick={() => setVisible((v) => v + 5)}
+          className="mt-4 w-full rounded-2xl border border-white/[0.08] bg-white/[0.02] py-3 text-[11px] font-mono uppercase tracking-[0.2em] text-[#FAF9F6] transition-all hover:border-[#DFBA73]/40 hover:text-[#DFBA73]"
+        >
+          Load {Math.min(5, comments.length - visible)} more {comments.length - visible <= 5 ? 'comment' : 'comments'}
+        </button>
+      )}
     </div>
   );
 }

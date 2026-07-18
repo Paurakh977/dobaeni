@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
-import { BadgeCheck, Minus, Plus, Truck, RotateCcw, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BadgeCheck, Minus, Plus, Truck, RotateCcw, ShieldCheck } from 'lucide-react';
 import SafeImage from '@/app/components/SafeImage';
 import { StarRating } from '@/app/components/StarRating';
 import { StarInput } from '@/app/components/StarInput';
@@ -12,23 +13,52 @@ import SaveToBoard from '@/app/components/SaveToBoard';
 import AddToCartButton from '@/app/components/AddToCartButton';
 import LikeButton from '@/app/components/LikeButton';
 import CommentSection from '@/app/components/CommentSection';
+import DiscoverFeed from '@/app/components/DiscoverFeed';
 import { formatPrice, formatDate, discountPercent, TIER_BADGE } from '@/lib/format';
 import type { ProductDetail, ReviewData } from '@/lib/queries';
+import type { ProductCardData } from '@/lib/types';
 
 export default function ProductDetail({
   product,
   initialFollowing,
   initialFollowerCount,
+  related,
 }: {
   product: ProductDetail;
   initialFollowing: boolean;
   initialFollowerCount: number;
+  related: { fromVendor: ProductCardData[]; similar: ProductCardData[] };
 }) {
+  const router = useRouter();
   const [active, setActive] = useState(0);
   const [size, setSize] = useState<string | null>(null);
   const [color, setColor] = useState<string | null>(null);
   const [qty, setQty] = useState(1);
   const [reviews, setReviews] = useState<ReviewData[]>(product.reviews);
+  const [visibleReviews, setVisibleReviews] = useState(3);
+
+  // "You might also like" — an endless doom-scroll fed by the /api/related route.
+  const [similarPool, setSimilarPool] = useState<ProductCardData[]>(related.similar);
+  const similarRef = useRef(similarPool);
+  useEffect(() => {
+    similarRef.current = similarPool;
+  }, [similarPool]);
+
+  const loadMoreSimilar = useCallback(async (): Promise<ProductCardData[]> => {
+    const exclude = similarRef.current.map((p) => p.id).join(',');
+    try {
+      const res = await fetch(
+        `/api/related?productId=${product.id}&exclude=${encodeURIComponent(exclude)}&limit=16`,
+      );
+      if (!res.ok) return [];
+      const data = await res.json();
+      const more: ProductCardData[] = data.products || [];
+      if (more.length) setSimilarPool((prev) => [...prev, ...more]);
+      return more;
+    } catch {
+      return [];
+    }
+  }, [product.id]);
 
   const [rvRating, setRvRating] = useState(0);
   const [rvTitle, setRvTitle] = useState('');
@@ -83,6 +113,15 @@ export default function ProductDetail({
 
   return (
     <div>
+      <button
+        onClick={() => router.back()}
+        className="mb-6 inline-flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[#8E8E93] transition-colors hover:text-[#DFBA73]"
+        data-cursor="hover"
+      >
+        <ArrowLeft size={14} />
+        Back
+      </button>
+
       <nav className="mb-8 flex items-center gap-2 text-[11px] font-mono uppercase tracking-wider text-[#52525B]">
         <Link href="/discover" className="hover:text-[#DFBA73]" data-cursor="hover">Discover</Link>
         <span>/</span>
@@ -373,7 +412,7 @@ export default function ProductDetail({
                 Be the first to review this piece.
               </p>
             ) : (
-              reviews.map((r) => (
+              reviews.slice(0, visibleReviews).map((r) => (
                 <div key={r.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.01] p-5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -403,6 +442,15 @@ export default function ProductDetail({
               ))
             )}
           </div>
+
+          {reviews.length > visibleReviews && (
+            <button
+              onClick={() => setVisibleReviews((v) => v + 3)}
+              className="mt-4 w-full rounded-2xl border border-white/[0.08] bg-white/[0.02] py-3 text-[11px] font-mono uppercase tracking-[0.2em] text-[#FAF9F6] transition-all hover:border-[#DFBA73]/40 hover:text-[#DFBA73]"
+            >
+              Read {Math.min(3, reviews.length - visibleReviews)} more {reviews.length - visibleReviews <= 3 ? 'review' : 'reviews'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -412,6 +460,23 @@ export default function ProductDetail({
           productId={product.id}
           initialComments={product.comments}
           initialCount={product.commentCount}
+        />
+      </div>
+
+      {/* Doom-scroll recommendations */}
+      <div className="mt-20 border-t border-white/[0.06] pt-12">
+        {related.fromVendor.length > 0 && (
+          <DiscoverFeed
+            title={`More from ${product.organization.name}`}
+            subtitle="Keep the vibe going — same brand, more to love"
+            products={related.fromVendor}
+          />
+        )}
+        <DiscoverFeed
+          title="You might also like"
+          subtitle="Similar pieces from other brands — keep scrolling"
+          products={similarPool}
+          loadMore={loadMoreSimilar}
         />
       </div>
     </div>

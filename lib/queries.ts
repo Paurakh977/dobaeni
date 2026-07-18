@@ -429,6 +429,158 @@ export async function getFollowState(userId: string, orgId: string): Promise<{ i
   return { isFollowing: Boolean(follow), followerCount: org?.followerCount || 0 };
 }
 
+// ===========================================================================
+// RELATED PRODUCTS — powers the doom-scroll at the bottom of a product page.
+// Two rails: more from the SAME vendor, and similar pieces from OTHER vendors.
+// ===========================================================================
+
+export async function getRelatedProducts(
+  productId: string,
+  userId?: string,
+  limit = 16,
+): Promise<{ fromVendor: ProductCardData[]; similar: ProductCardData[] }> {
+  const base = await db.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      organizationId: true,
+      categoryId: true,
+      gender: true,
+      material: true,
+      styleKeywords: true,
+    },
+  });
+  if (!base) return { fromVendor: [], similar: [] };
+
+  const styleKeywords = parseArr(base.styleKeywords);
+
+  const similarityOr: any[] = [];
+  if (base.categoryId) similarityOr.push({ categoryId: base.categoryId });
+  if (base.gender) similarityOr.push({ gender: base.gender });
+  if (base.material) similarityOr.push({ material: base.material });
+  for (const k of styleKeywords) {
+    similarityOr.push({ styleKeywords: { contains: k, mode: 'insensitive' } });
+  }
+  // Fallback: if there is nothing to match on, just pull popular other products.
+  if (similarityOr.length === 0) similarityOr.push({ id: { not: productId } });
+
+  const include = {
+    images: { orderBy: { position: 'asc' as const }, take: 1 },
+    category: { select: { name: true } },
+    organization: {
+      select: {
+        id: true, name: true, slug: true, logo: true, banner: true,
+        isVerified: true, tier: true, city: true, followerCount: true,
+      },
+    },
+    _count: { select: { comments: true } },
+  };
+
+  const [fromVendorRaw, similarRaw] = await Promise.all([
+    db.product.findMany({
+      where: {
+        isPublished: true,
+        isActive: true,
+        stock: { gt: 0 },
+        organizationId: base.organizationId,
+        id: { not: productId },
+      },
+      orderBy: [{ soldCount: 'desc' }, { ratingAvg: 'desc' }],
+      take: limit,
+      include,
+    }),
+    db.product.findMany({
+      where: {
+        isPublished: true,
+        isActive: true,
+        stock: { gt: 0 },
+        id: { not: productId },
+        organizationId: { not: base.organizationId },
+        OR: similarityOr,
+      },
+      orderBy: [{ soldCount: 'desc' }, { ratingAvg: 'desc' }],
+      take: limit,
+      include,
+    }),
+  ]);
+
+  const toCards = (rows: any[]) =>
+    userId
+      ? attachLiked(rows.map((p) => productCard(p)), userId)
+      : rows.map((p) => productCard(p));
+
+  const [fromVendor, similar] = await Promise.all([
+    toCards(fromVendorRaw),
+    toCards(similarRaw),
+  ]);
+
+  return { fromVendor, similar };
+}
+
+// Paginated variant of the "similar from other vendors" rail. Used by the
+// infinite doom-scroll on the product page — pass the already-shown ids so we
+// never repeat a card.
+export async function getSimilarProducts(
+  productId: string,
+  excludeIds: string[] = [],
+  limit = 16,
+  userId?: string,
+): Promise<ProductCardData[]> {
+  const base = await db.product.findUnique({
+    where: { id: productId },
+    select: {
+      id: true,
+      organizationId: true,
+      categoryId: true,
+      gender: true,
+      material: true,
+      styleKeywords: true,
+    },
+  });
+  if (!base) return [];
+
+  const styleKeywords = parseArr(base.styleKeywords);
+
+  const similarityOr: any[] = [];
+  if (base.categoryId) similarityOr.push({ categoryId: base.categoryId });
+  if (base.gender) similarityOr.push({ gender: base.gender });
+  if (base.material) similarityOr.push({ material: base.material });
+  for (const k of styleKeywords) {
+    similarityOr.push({ styleKeywords: { contains: k, mode: 'insensitive' } });
+  }
+  if (similarityOr.length === 0) similarityOr.push({ id: { not: productId } });
+
+  const where = {
+    isPublished: true,
+    isActive: true,
+    stock: { gt: 0 },
+    id: { not: productId, notIn: excludeIds },
+    organizationId: { not: base.organizationId },
+    OR: similarityOr,
+  };
+
+  const rows = await db.product.findMany({
+    where,
+    orderBy: [{ soldCount: 'desc' }, { ratingAvg: 'desc' }],
+    take: limit,
+    include: {
+      images: { orderBy: { position: 'asc' as const }, take: 1 },
+      category: { select: { name: true } },
+      organization: {
+        select: {
+          id: true, name: true, slug: true, logo: true, banner: true,
+          isVerified: true, tier: true, city: true, followerCount: true,
+        },
+      },
+      _count: { select: { comments: true } },
+    },
+  });
+
+  return userId
+    ? attachLiked(rows.map((p) => productCard(p)), userId)
+    : rows.map((p) => productCard(p));
+}
+
 // Attach the current user's like state to a list of product cards in a single query.
 async function attachLiked(cards: ProductCardData[], userId: string): Promise<ProductCardData[]> {
   if (cards.length === 0) return cards;
