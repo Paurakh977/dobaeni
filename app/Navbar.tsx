@@ -5,9 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useSession, signOut } from "@/lib/auth-client";
 import { AnimatePresence, motion } from "framer-motion";
-import { LogOut, LayoutDashboard, Heart, Settings, ChevronDown, Shield, UserCog } from "lucide-react";
+import { LogOut, LayoutDashboard, Heart, Settings, ChevronDown, Shield, UserCog, MessageCircle } from "lucide-react";
 import Magnetic from "./Magnetic";
 import CartBadge from "./components/CartBadge";
+import { ChatModal } from "./components/ChatModal";
 
   const LINKS: { label: string; href: string }[] = [
     { label: "Discover", href: "/discover" },
@@ -19,6 +20,7 @@ import CartBadge from "./components/CartBadge";
 export default function Navbar() {
   const { data: session, isPending } = useSession();
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const isAdmin = session?.user?.role === "admin" || session?.user?.role === "moderator";
   const impersonated = Boolean((session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy);
@@ -88,6 +90,16 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-4">
+        <Magnetic>
+          <button
+            onClick={() => setChatOpen(true)}
+            data-cursor="hover"
+            aria-label="Open chat"
+            className="group flex h-9 w-9 items-center justify-center rounded-full border border-[#FAF9F6]/20 bg-[#08080a]/80 text-[#FAF9F6]/80 backdrop-blur-md transition-all duration-300 hover:border-[#DFBA73]/50 hover:text-[#DFBA73]"
+          >
+            <MessageCircle size={16} />
+          </button>
+        </Magnetic>
         {!isPending && session && <CartBadge />}
       <div className="relative">
         {isPending ? (
@@ -180,6 +192,7 @@ export default function Navbar() {
       </div>
       </div>
     </nav>
+    <ChatModal open={chatOpen} onClose={() => setChatOpen(false)} />
     </>
   );
 }

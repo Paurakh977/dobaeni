@@ -30,6 +30,13 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
     // Sync Lenis scroll with GSAP ScrollTrigger
     lenis.on('scroll', ScrollTrigger.update);
 
+    // Pause Lenis while a modal (e.g. chat) is open so wheel/touch inside
+    // it doesn't drive the page behind.
+    const stop = () => lenis.stop();
+    const start = () => lenis.start();
+    window.addEventListener('lenis:stop', stop);
+    window.addEventListener('lenis:start', start);
+
     const onTick = (time: number) => {
       lenis.raf(time * 1000);
     };
@@ -50,6 +57,8 @@ export default function SmoothScroll({ children }: { children: React.ReactNode }
 
     return () => {
       resizeObserver.disconnect();
+      window.removeEventListener('lenis:stop', stop);
+      window.removeEventListener('lenis:start', start);
       gsap.ticker.remove(onTick);
       lenis.destroy();
     };
