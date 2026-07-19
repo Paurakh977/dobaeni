@@ -237,6 +237,10 @@ export async function setProductFeatured(productId: string, featured: boolean) {
   await db.product.update({ where: { id: productId }, data: { isFeatured: featured } });
 }
 
+export async function deleteProduct(productId: string) {
+  await db.product.delete({ where: { id: productId } });
+}
+
 // ── Stats ────────────────────────────────────────────────────────────────────
 
 export type AdminStats = {

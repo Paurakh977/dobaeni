@@ -15,8 +15,10 @@ import {
   X,
   Layers,
   Sparkles,
-  Building2
+  Building2,
+  Trash2
 } from 'lucide-react';
+import ConfirmDialog from '@/app/components/ConfirmDialog';
 
 export type ProductRow = {
   id: string;
@@ -46,6 +48,8 @@ export default function ProductsTable({
   const [msg, setMsg] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'published' | 'hidden' | 'featured' | 'flagged'>('all');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   async function act(id: string, action: string, extra: Record<string, unknown> = {}) {
     setBusyId(id);
@@ -63,6 +67,22 @@ export default function ProductsTable({
       setMsg(e instanceof Error ? e.message : 'Action failed');
     } finally {
       setBusyId(null);
+    }
+  }
+
+  async function confirmDelete(id: string) {
+    setDeleteBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/admin/products/${id}`, { method: 'DELETE' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Delete failed');
+      setDeleteId(null);
+      router.refresh();
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -346,6 +366,20 @@ export default function ProductsTable({
                             )}
                           </motion.button>
                         )}
+
+                        {/* Delete Action Trigger */}
+                        {canModerate && (
+                          <motion.button
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => setDeleteId(p.id)}
+                            disabled={isBusy}
+                            title="Delete product"
+                            className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-500/10 bg-zinc-500/5 text-[#8E8E93] transition-all duration-200 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-40"
+                          >
+                            <Trash2 size={14} />
+                          </motion.button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
@@ -376,6 +410,21 @@ export default function ProductsTable({
           </motion.tbody>
         </table>
       </div>
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        danger
+        title="Delete product?"
+        description={
+          deleteId
+            ? `"${products.find((p) => p.id === deleteId)?.name ?? 'This product'}" will be permanently removed. This cannot be undone.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        busy={deleteBusy}
+        onConfirm={() => deleteId && confirmDelete(deleteId)}
+        onCancel={() => !deleteBusy && setDeleteId(null)}
+      />
     </div>
   );
 }

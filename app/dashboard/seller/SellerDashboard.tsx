@@ -19,6 +19,7 @@ import type { SellerStats, SellerProductView, OrderView, SellerAnalytics, FavBra
 import LikedTab from '@/app/components/dashboard/LikedTab';
 import FavBrandsTab from '@/app/components/dashboard/FavBrandsTab';
 import LooksTab from '@/app/components/dashboard/LooksTab';
+import ConfirmDialog from '@/app/components/ConfirmDialog';
 import type { ProductCardData, LookSummary } from '@/lib/types';
 
 /* ─── Types ──────────────────────────────────────────────────────────── */
@@ -859,7 +860,7 @@ function Products({ suspended, products }: { suspended: boolean; products: Selle
                   >
                     <Pencil size={13} />
                   </button>
-                  <DeleteProduct id={p.id} disabled={suspended} onDone={() => router.refresh()} />
+                  <DeleteProduct id={p.id} name={p.name} disabled={suspended} onDone={() => router.refresh()} />
                 </div>
               </motion.div>
             ))}
@@ -894,26 +895,49 @@ function FilterChip({ active, label, onClick, onRemove }: { active: boolean; lab
 }
 
 /* ─── DeleteProduct ──────────────────────────────────────────────────── */
-function DeleteProduct({ id, disabled, onDone }: { id: string; disabled?: boolean; onDone: () => void }) {
+function DeleteProduct({ id, name, disabled, onDone }: { id: string; name: string; disabled?: boolean; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [open, setOpen] = useState(false);
+
   async function del() {
-    if (!confirm('Delete this product?')) return;
     setBusy(true);
     try {
-      await fetch(`/api/products/${id}`, { method: 'DELETE' });
-      onDone();
-    } finally { setBusy(false); }
+      const res = await fetch(`/api/products/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setOpen(false);
+        onDone();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to delete');
+      }
+    } catch (e) {
+      setBusy(false);
+      alert(e instanceof Error ? e.message : 'Failed to delete');
+    }
   }
+
   return (
-    <button
-      onClick={del}
-      disabled={busy || disabled}
-      data-cursor="hover"
-      className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-red-400 disabled:opacity-40 active:scale-90"
-      aria-label="Delete"
-    >
-      {busy ? <Loader2 size={13} className="animate-spin" /> : <Trash2 size={13} />}
-    </button>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        data-cursor="hover"
+        className="rounded-xl p-2 text-[#52525B] transition-all hover:bg-white/[0.04] hover:text-red-400 disabled:opacity-30 disabled:pointer-events-none active:scale-90"
+        aria-label="Delete"
+      >
+        <Trash2 size={13} />
+      </button>
+      <ConfirmDialog
+        open={open}
+        danger
+        title="Delete product?"
+        description={`"${name}" will be permanently removed from your catalog. This cannot be undone.`}
+        confirmLabel="Delete"
+        busy={busy}
+        onConfirm={del}
+        onCancel={() => !busy && setOpen(false)}
+      />
+    </>
   );
 }
 

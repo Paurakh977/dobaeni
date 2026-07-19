@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { authorizeApi } from '@/lib/admin-auth';
-import { setProductPublished, setProductFeatured } from '@/lib/admin';
+import { setProductPublished, setProductFeatured, deleteProduct } from '@/lib/admin';
 
 export const runtime = 'nodejs';
+
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await authorizeApi('product:moderate');
+  if (!session) return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  const { id } = await params;
+  try {
+    await deleteProduct(id);
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   req: NextRequest,
