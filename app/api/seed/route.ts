@@ -35,6 +35,39 @@ const pickSome = <T,>(arr: T[], n: number): T[] => {
 };
 const round10 = (n: number) => Math.round(n / 10) * 10;
 
+// Build a realistic, brand-catalog-style product name from a brand's theme.
+// Mixes adjective / colour / material / noun patterns so names read like real
+// fashion listings instead of generic "Edit 47" placeholders.
+function genProductName(theme: Theme): string {
+  const adj = pick(theme.adjectives);
+  const noun = pick(theme.nouns);
+  const color = pick(theme.colors);
+  const material = pick(theme.materials);
+  const patterns = [
+    () => `${adj} ${noun}`,
+    () => `${color} ${adj} ${noun}`,
+    () => `${adj} ${noun} in ${material}`,
+    () => `${material} ${noun}`,
+    () => `${color} ${noun}`,
+    () => `${noun} in ${color}`,
+  ];
+  return pick(patterns)();
+}
+
+// A more fleshed-out, realistic product description per brand theme.
+function genProductDescription(theme: Theme, brandName: string): string {
+  const noun = pick(theme.nouns);
+  const material = pick(theme.materials);
+  const adj = pick(theme.adjectives);
+  return pick([
+    `${adj} ${noun} cut from ${material}, finished in our ${brandName} studio. A considered piece made to be worn on repeat.`,
+    `A ${noun.toLowerCase()} that blends ${theme.aesthetics[0].toLowerCase()} ease with ${material.toLowerCase()} you can feel. Designed and made in Nepal.`,
+    `The ${noun.toLowerCase()} reimagined — ${adj.toLowerCase()}, easy to style, and built to outlast the season. Part of the ${brandName} core line.`,
+    `${material} ${noun.toLowerCase()} with a relaxed, lived-in hand. Small-batch, so each one carries its own character.`,
+    `Everyday ${noun.toLowerCase()} with a ${theme.aesthetics[0].toLowerCase()} slant. ${adj}, versatile, and made to layer.`,
+  ]);
+}
+
 const SEED_PASS = 'Dobaeni@1234';
 // 2-digit up to 99, 3-digit from 100 — matches scripts/seed-images.ts naming.
 const img = (i: number) => `/seed/img-${String(i).padStart(i <= 99 ? 2 : 3, '0')}.jpg`;
@@ -904,19 +937,14 @@ async function seedCustomProducts(
     const price = theme ? round10(rnd(theme.priceMin, theme.priceMax)) : round10(rnd(1000, 9000));
     const hasCompare = Math.random() < 0.5;
     const compareAtPrice = hasCompare ? round10(price * (1.2 + Math.random() * 0.5)) : null;
-    const name = `${c.aesthetic} Edit ${rnd(1, 99)}`;
+    const name = genProductName(theme!);
 
     const created = await db.product.create({
       data: {
         organizationId: orgId,
         name,
         slug: `${slugify(name) || 'custom'}-${randomUUID().slice(0, 4)}`,
-        description: `A hand-picked ${c.aesthetic} piece from our curated drop. ${pick([
-          'Limited, one-of-a-kind find.',
-          'Category-accurate styling straight from the studio.',
-          'A standout addition to your rotation.',
-          'Shot in natural light to show true colour and texture.',
-        ])}`,
+        description: `A hand-picked ${c.aesthetic} piece from our curated drop — ${genProductDescription(theme!, (brand as any).storeName ?? 'the studio')}`,
         price,
         compareAtPrice,
         currency: 'NPR',
@@ -1209,7 +1237,7 @@ async function seedBrand(brand: Brand, nextImg: () => string) {
   const t = brand.theme;
   const enriched: EnrichedProduct[] = [];
   for (let i = 0; i < brand.productCount; i++) {
-    const name = `${pick(t.adjectives)} ${pick(t.nouns)}`;
+    const name = genProductName(t);
     const price = round10(rnd(t.priceMin, t.priceMax));
     const hasCompare = Math.random() < 0.55;
     const compareAtPrice = hasCompare ? round10(price * (1.2 + Math.random() * 0.5)) : null;
@@ -1230,13 +1258,7 @@ async function seedBrand(brand: Brand, nextImg: () => string) {
         organizationId: orgId,
         name,
         slug: `${slugify(name) || 'product'}-${randomUUID().slice(0, 4)}`,
-        description: `${name} from ${brand.storeName}. ${pick([
-          'A wardrobe essential cut for effortless everyday wear.',
-          'Limited run — crafted in small batches by our studio.',
-          'Designed in Nepal, made to last beyond seasons.',
-          'A modern silhouette with a heritage twist.',
-          'Soft-hand feel, structured enough to dress up or down.',
-        ])}`,
+        description: genProductDescription(t, brand.storeName),
         price,
         compareAtPrice,
         currency: 'NPR',
