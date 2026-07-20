@@ -1,37 +1,48 @@
-import { NextRequest } from "next/server";
+// Replaces the old proxy that forwarded to the Python FastAPI server.
+// Now runs the Google ADK TypeScript agent IN-PROCESS and streams
+// the same SSE protocol the ChatModal already consumes. This makes the
+// whole app (Next.js + agent) a single `next build` deployable on Vercel
+// — no separate Python server required.
 
+import { NextRequest } from "next/server";
+import { runChat } from "@/lib/agent/runChat";
+
+// Next.js 16 only supports "nodejs" | "edge" | "experimental-edge" as runtime.
+// The agent (pg + @google/adk + adk-llm-bridge) runs fine on the Node.js
+// runtime — no "bun" runtime exists in Next. The project still uses Bun as
+// its package manager / dev server; this only controls the route's JS host.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-const CHAT_BACKEND =
-  process.env.CHAT_BACKEND_URL ?? "http://localhost:8000/api/chat/stream";
+export const maxDuration = 60; // Vercel Hobby ceiling; raise on Pro
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => ({}));
+  const body = await req.json().catch(() => ({ messages: [] }));
+  const messages: { role: string; content: string }[] = Array.isArray(
+    body?.messages
+  )
+    ? body.messages
+    : [];
 
-  const upstream = await fetch(CHAT_BACKEND, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (obj: unknown) => {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
+        );
+      };
+      try {
+        await runChat(messages, send);
+      } catch (e: any) {
+        send({ type: "error", text: String(e?.message || e) });
+      } finally {
+        controller.close();
+      }
+    },
   });
 
-  if (!upstream.ok || !upstream.body) {
-    return new Response(
-      `data: ${JSON.stringify({ type: "error", text: "Chat backend unavailable" })}\n\n` +
-        `data: ${JSON.stringify({ type: "done", text: "" })}\n\n`,
-      {
-        status: 502,
-        headers: {
-          "Content-Type": "text/event-stream",
-          "Cache-Control": "no-cache",
-          Connection: "keep-alive",
-        },
-      }
-    );
-  }
-
-  // Pipe the FastAPI SSE stream straight through to the browser.
-  return new Response(upstream.body, {
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",

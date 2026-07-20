@@ -713,7 +713,7 @@ export function ChatModal({
         </span>
         <span className="h-[3px] w-[3px] rounded-full bg-[#E5C483]/60" />
         <span className="font-mono text-[8px] uppercase tracking-[0.25em] text-[#8E8E93]/70">
-          {MODEL}
+          AGENTIC HELP BOT
         </span>
       </div>
       <div className="flex items-center gap-2 text-[#8E8E93]">
