@@ -9,26 +9,38 @@
 
 import { Pool } from "pg";
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 // Default connection that matches the local docker-compose Postgres. Used only as
-// a fallback when no DB url is configured anywhere.
+// a dev fallback when no DB url is configured. In production a real hosted URL
+// MUST be set via AGENT_DATABASE_URL (or DATABASE_URL) — we refuse to silently
+// fall back to localhost there.
 const DEFAULT_DATABASE_URL =
   "postgresql://dobaeni:dobaeni@localhost:5432/dobaeni";
 
 // Falls back to DATABASE_URL if a dedicated agent url isn't set. Production
 // deployments should set AGENT_DATABASE_URL to a read-only role.
 function resolveDbUrl(): string {
-  return (
+  const url =
     process.env.AGENT_DATABASE_URL ||
     process.env.DATABASE_URL ||
-    DEFAULT_DATABASE_URL
-  );
+    (IS_PRODUCTION ? null : DEFAULT_DATABASE_URL);
+  if (!url) {
+    throw new Error(
+      "AGENT_DATABASE_URL (or DATABASE_URL) must be set in production."
+    );
+  }
+  return url;
 }
 
 // Used to turn a product/brand slug into a link the chat UI can render.
-const SITE_BASE_URL = (process.env.SITE_BASE_URL || "http://localhost:3000").replace(
-  /\/$/,
-  ""
-);
+const SITE_BASE_URL = (() => {
+  const raw = process.env.SITE_BASE_URL || (!IS_PRODUCTION ? "http://localhost:3000" : null);
+  if (!raw) {
+    throw new Error("SITE_BASE_URL must be set in production.");
+  }
+  return raw.replace(/\/$/, "");
+})();
 
 let _pool: Pool | null = null;
 
