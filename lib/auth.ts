@@ -147,7 +147,7 @@ export const auth = betterAuth({
 
   trustedOrigins: Array.from(
     new Set([
-      'http://localhost:3000',
+      ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:3000']),
       appURL,
       ...(getEnv('TRUSTED_ORIGINS', false)
         ?.split(',')

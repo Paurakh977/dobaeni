@@ -9,13 +9,22 @@ import { Custom } from "adk-llm-bridge";
 import { SYSTEM_PROMPT } from "./systemPrompt";
 import { findProductsTool, findBrandsTool } from "./tools";
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const OPENCODE_API_BASE = "https://opencode.ai/zen/v1";
 const FIXED_MODEL_ID = "deepseek-v4-flash-free";
 
 // The single model exposed to the chat UI (same as the Python server).
+// Both the key and base URL are read from the environment; the base URL
+// keeps a sane default, but the key is required (and fails loudly in prod
+// if missing rather than silently producing empty responses).
+const apiKey = process.env.OPENCODE_API_KEY;
+if (IS_PRODUCTION && !apiKey) {
+  throw new Error("OPENCODE_API_KEY must be set in production.");
+}
+
 const model = Custom(FIXED_MODEL_ID, {
   baseURL: process.env.OPENCODE_API_BASE || OPENCODE_API_BASE,
-  apiKey: process.env.OPENCODE_API_KEY,
+  apiKey: apiKey,
   name: "opencode-zen",
 });
 
