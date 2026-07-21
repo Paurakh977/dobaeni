@@ -1,7 +1,12 @@
 import { Resend } from 'resend';
 
 const resendApiKey = process.env.RESEND_API_KEY?.trim();
-const devEmailOverride = process.env.DEV_EMAIL_OVERRIDE?.trim();
+// DEV_EMAIL_OVERRIDE is only honoured in development to avoid accidental
+// email leaks when deploying to production (e.g. Vercel).
+const devEmailOverride =
+  process.env.NODE_ENV !== 'production'
+    ? process.env.DEV_EMAIL_OVERRIDE?.trim()
+    : undefined;
 const emailFrom =
   process.env.EMAIL_FROM?.trim() || 'Dobaeni <onboarding@resend.dev>';
 
@@ -14,6 +19,9 @@ const resend = resendApiKey ? new Resend(resendApiKey) : null;
  * that inbox and the real recipient is shown in the subject. This lets you
  * exercise the full auth email flow (verification, reset, 2FA OTP) with a
  * temporary/dev inbox without sending anything to real users.
+ *
+ * In production DEV_EMAIL_OVERRIDE is always ignored — emails go to the real
+ * recipient using the verified EMAIL_FROM address.
  */
 export async function sendEmail({
   to,
